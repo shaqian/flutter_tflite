@@ -64,4 +64,4 @@ await Tflite.close();
 
 ## Demo
 
-Refer to the [example](https://shaqian.com/flutter_tflite/example).
+Refer to the [example](https://github.com/shaqian/flutter_tflite/tree/master/example).
