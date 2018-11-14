@@ -57,7 +57,7 @@ public class TflitePlugin implements MethodCallHandler {
         result.success(res);
       }
       catch (Exception e) {
-        result.error("Failed to load model" , null, null);
+        result.error("Failed to load model" , e.getMessage(), e);
       }
     } if (call.method.equals("runModelOnImage")) {
       try {
@@ -65,7 +65,7 @@ public class TflitePlugin implements MethodCallHandler {
         result.success(res);
       }
       catch (Exception e) {
-        result.error("Failed to run model" , null, null);
+        result.error("Failed to run model" , e.getMessage(), e);
       }
     } if (call.method.equals("close")) {
       close();
