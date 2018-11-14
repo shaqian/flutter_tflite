@@ -3,10 +3,10 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'tflite'
-  s.version          = '0.0.2'
+  s.version          = '0.0.3'
   s.summary          = 'A Flutter plugin for accessing TensorFlow Lite.'
   s.description      = <<-DESC
-A Flutter plugin for accessing TensorFlow Lite.
+A Flutter plugin for accessing TensorFlow Lite. Supports both iOS and Android.
                        DESC
   s.homepage         = 'https://github.com/shaqian/flutter_tflite'
   s.license          = { :file => '../LICENSE' }

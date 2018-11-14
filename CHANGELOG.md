@@ -1,3 +1,8 @@
+## 0.0.3
+
+* Pass error message in channel in Android.
+* Use non hard coded label size in iOS.
+
 ## 0.0.2
 
 * Fixed link.

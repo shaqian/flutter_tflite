@@ -56,7 +56,7 @@ var recognitions = await Tflite.runModelOnImage(
 );
 ```
 
-5. Release resources
+5. Release resources:
 
 ```
 await Tflite.close();
