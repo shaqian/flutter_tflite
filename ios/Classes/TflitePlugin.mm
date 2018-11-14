@@ -104,7 +104,7 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   return @"success";
 }
 
-static void GetTopN(const float* prediction, const int prediction_size, const int num_results,
+static void GetTopN(const float* prediction, const unsigned long prediction_size, const int num_results,
                     const float threshold, std::vector<std::pair<float, int> >* top_results) {
   std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>,
   std::greater<std::pair<float, int> > >
@@ -192,7 +192,7 @@ NSMutableArray* runModelOnImage(NSDictionary* args) {
   if (output == NULL)
     return empty;
   
-  const int output_size = 1000;
+  const unsigned long output_size = labels.size();
   const int kNumResults = [args[@"numResults"] intValue];
   const float kThreshold = [args[@"threshold"] floatValue];
   std::vector<std::pair<float, int> > top_results;
