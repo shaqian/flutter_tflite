@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'tflite'
-  s.version          = '0.0.3'
+  s.version          = '0.0.4'
   s.summary          = 'A Flutter plugin for accessing TensorFlow Lite.'
   s.description      = <<-DESC
 A Flutter plugin for accessing TensorFlow Lite. Supports both iOS and Android.
@@ -16,8 +16,9 @@ A Flutter plugin for accessing TensorFlow Lite. Supports both iOS and Android.
   s.public_header_files = 'Classes/**/*.h'
   s.dependency 'Flutter'
   s.dependency 'TensorFlowLite'
-  s.xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/Headers/Private" "${PODS_ROOT}/Headers/Private/tflite" "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Flutter" "${PODS_ROOT}/Headers/Public/TensorFlowLite/tensorflow_lite" "${PODS_ROOT}/Headers/Public/tflite"' }
+  s.xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/Headers/Private" "${PODS_ROOT}/Headers/Private/tflite" "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Flutter" "${PODS_ROOT}/Headers/Public/TensorFlowLite/tensorflow_lite" "${PODS_ROOT}/Headers/Public/tflite" "${PODS_ROOT}/TensorFlowLite/Frameworks/tensorflow_lite.framework/Headers"' }
 
   s.ios.deployment_target = '9.0'
+  s.static_framework = true
 end
 

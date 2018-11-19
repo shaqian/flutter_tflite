@@ -3,7 +3,7 @@ PODS:
   - image_picker (0.0.1):
     - Flutter
   - TensorFlowLite (1.10.1)
-  - tflite (0.0.3):
+  - tflite (0.0.4):
     - Flutter
     - TensorFlowLite
 

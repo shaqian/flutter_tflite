@@ -16,6 +16,10 @@ In `android/app/build.gradle` file add the following setting in `android` block.
     }
 ```
 
+### iOS
+
+If you get error like "'vector' file not found", please open `ios/Runner.xcworkspace` in Xcode, click Runner > Tagets > Runner > Build Settings, search `Compile Sources As`, change the value to `Objective-C++`;
+
 ## Usage
 
 1. Create a `assets` folder and place your label file and model file in it. In `pubspec.yaml` add:

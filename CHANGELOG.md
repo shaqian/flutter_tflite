@@ -1,3 +1,7 @@
+## 0.0.4
+
+* Support Swift based project
+
 ## 0.0.3
 
 * Pass error message in channel in Android.
