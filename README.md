@@ -32,22 +32,24 @@ If you get error like "'vector' file not found", please open `ios/Runner.xcworks
 
 2. Import the library:
 
-```
+```dart
 import 'package:tflite/tflite.dart';
 ```
 
 3. Load the model and labels:
 
-```
+```dart
 String res = await Tflite.loadModel(
   model: "assets/mobilenet_v1_1.0_224.tflite",
   labels: "assets/labels.txt",
 );
 ```
 
-4. Run the model on a image file:
+4. Run the model on
 
-```
+- image file:
+
+```dart
 var recognitions = await Tflite.runModelOnImage(
   path: filepath,   // required
   inputSize: 224,   // wanted input size, defaults to 224
@@ -58,6 +60,33 @@ var recognitions = await Tflite.runModelOnImage(
   threshold: 0.05,  // defaults to 0.1
   numThreads: 1,    // defaults to 1
 );
+```
+
+- byte list:
+
+```dart
+var recognitions = await Tflite.runModelOnBinary(
+  binary: imageToByteList(image, 224, 127.5, 127.5),// required
+  numResults: 6,    // defaults to 5
+  threshold: 0.05,  // defaults to 0.1
+  numThreads: 1,    // defaults to 1
+);
+
+Uint8List imageToByteList(Image image, int inputSize, double mean, double std) {
+  var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
+  var buffer = Float32List.view(convertedBytes.buffer);
+  int pixelIndex = 0;
+  for (var i = 0; i < inputSize; i++) {
+    for (var j = 0; j < inputSize; j++) {
+      var pixel = image.getPixel(i, j);
+      buffer[pixelIndex++] = (((pixel >> 16) & 0xFF) - mean) / std;
+      buffer[pixelIndex++] = (((pixel >> 8) & 0xFF) - mean) / std;
+      buffer[pixelIndex++] = (((pixel) & 0xFF) - mean) / std;
+    }
+  }
+  return convertedBytes.buffer.asUint8List();
+}
+
 ```
 
 5. Release resources:

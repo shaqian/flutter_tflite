@@ -1,3 +1,7 @@
+## 0.0.5
+
+* Support byte list: runModelOnBinary
+
 ## 0.0.4
 
 * Support Swift based project

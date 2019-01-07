@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'tflite'
-  s.version          = '0.0.4'
+  s.version          = '0.0.5'
   s.summary          = 'A Flutter plugin for accessing TensorFlow Lite.'
   s.description      = <<-DESC
 A Flutter plugin for accessing TensorFlow Lite. Supports both iOS and Android.

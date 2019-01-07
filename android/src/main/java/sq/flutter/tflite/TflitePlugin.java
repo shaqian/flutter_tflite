@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Vector;
 
-
 public class TflitePlugin implements MethodCallHandler {
   private final Registrar mRegistrar;
   private Interpreter tfLite;
@@ -59,7 +58,7 @@ public class TflitePlugin implements MethodCallHandler {
       catch (Exception e) {
         result.error("Failed to load model" , e.getMessage(), e);
       }
-    } if (call.method.equals("runModelOnImage")) {
+    } else if (call.method.equals("runModelOnImage")) {
       try {
         List<Map<String, Object>> res = runModelOnImage((HashMap) call.arguments);
         result.success(res);
@@ -67,11 +66,18 @@ public class TflitePlugin implements MethodCallHandler {
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
-    } if (call.method.equals("close")) {
+    } else if (call.method.equals("runModelOnBinary")) {
+      try {
+        List<Map<String, Object>> res = runModelOnBinary((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
+    } else if (call.method.equals("close")) {
       close();
     }
   }
-
 
   private String loadModel(HashMap args) throws IOException {
     String model = args.get("model").toString();
@@ -139,6 +145,37 @@ public class TflitePlugin implements MethodCallHandler {
     return imgData;
   }
 
+  private List<Map<String, Object>> GetTopN(int numResults, float threshold) {
+    PriorityQueue<Map<String, Object>> pq =
+        new PriorityQueue<>(
+            1,
+            new Comparator<Map<String, Object>>() {
+              @Override
+              public int compare(Map<String, Object> lhs, Map<String, Object> rhs) {
+                return Float.compare((float)rhs.get("confidence"), (float)lhs.get("confidence"));
+              }
+            });
+    
+    for (int i = 0; i < labels.size(); ++i) {
+      float confidence = labelProb[0][i];
+      if (confidence > threshold) {
+        Map<String, Object> res = new HashMap<>();
+        res.put("index", i);
+        res.put("label", labels.size() > i ? labels.get(i) : "unknown");
+        res.put("confidence", confidence);
+        pq.add(res);
+      }
+    }
+
+    final ArrayList<Map<String, Object>> recognitions = new ArrayList<>();
+    int recognitionsSize = Math.min(pq.size(), numResults);
+    for (int i = 0; i < recognitionsSize; ++i) {
+      recognitions.add(pq.poll());
+    }
+
+    return recognitions;
+  }
+
   private List<Map<String, Object>> runModelOnImage(HashMap args) throws IOException {
     String path = args.get("path").toString();
     int NUM_THREADS = (int)args.get("numThreads");
@@ -154,46 +191,31 @@ public class TflitePlugin implements MethodCallHandler {
     float THRESHOLD = (float)threshold;
 
     ByteBuffer imgData = loadImage(path, WANTED_WIDTH, WANTED_HEIGHT, WANTED_CHANNELS, IMAGE_MEAN, IMAGE_STD);
-
     tfLite.setNumThreads(NUM_THREADS);
     tfLite.run(imgData, labelProb);
 
-    PriorityQueue<Map<String, Object>> pq =
-        new PriorityQueue<>(
-            1,
-            new Comparator<Map<String, Object>>() {
-              @Override
-              public int compare(Map<String, Object> lhs, Map<String, Object> rhs) {
-                return Float.compare((float)rhs.get("confidence"), (float)lhs.get("confidence"));
-              }
-            });
-    for (int i = 0; i < labels.size(); ++i) {
-      float confidence = labelProb[0][i];
-      if (confidence > THRESHOLD) {
-        Map<String, Object> res = new HashMap<>();
-        res.put("index", i);
-        res.put("label", labels.size() > i ? labels.get(i) : "unknown");
-        res.put("confidence", confidence);
-        pq.add(res);
-      }
-    }
-
-    final ArrayList<Map<String, Object>> recognitions = new ArrayList<>();
-    int recognitionsSize = Math.min(pq.size(), NUM_RESULTS);
-    for (int i = 0; i < recognitionsSize; ++i) {
-      recognitions.add(pq.poll());
-    }
-
-    return recognitions;
+    return GetTopN(NUM_RESULTS, THRESHOLD);
   }
 
+  private List<Map<String, Object>> runModelOnBinary(HashMap args) throws IOException {
+    byte[] binary = (byte[])args.get("binary");
+    int NUM_THREADS = (int)args.get("numThreads");
+    int NUM_RESULTS = (int)args.get("numResults");
+    double threshold = (double)args.get("threshold");
+    float THRESHOLD = (float)threshold;
+
+    ByteBuffer imgData = ByteBuffer.wrap(binary);
+    tfLite.setNumThreads(NUM_THREADS);
+    tfLite.run(imgData, labelProb);
+
+    return GetTopN(NUM_RESULTS, THRESHOLD);
+  }
 
   private void close() {
     tfLite.close();
     labels = null;
     labelProb = null;
   }
-
 
   public static Matrix getTransformationMatrix(final int srcWidth,
                                                final int srcHeight,

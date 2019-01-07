@@ -19,6 +19,7 @@
 
 NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* args);
 NSMutableArray* runModelOnImage(NSDictionary* args);
+NSMutableArray* runModelOnBinary(NSDictionary* args);
 void close();
 
 @implementation TflitePlugin {
@@ -47,6 +48,9 @@ void close();
     result(load_result);
   } else if ([@"runModelOnImage" isEqualToString:call.method]) {
     NSMutableArray* inference_result = runModelOnImage(call.arguments);
+    result(inference_result);
+  } else if ([@"runModelOnBinary" isEqualToString:call.method]) {
+    NSMutableArray* inference_result = runModelOnBinary(call.arguments);
     result(inference_result);
   } else if ([@"close" isEqualToString:call.method]) {
     close();
@@ -104,11 +108,13 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   return @"success";
 }
 
-static void GetTopN(const float* prediction, const unsigned long prediction_size, const int num_results,
-                    const float threshold, std::vector<std::pair<float, int> >* top_results) {
+NSMutableArray* GetTopN(const float* prediction, const unsigned long prediction_size, const int num_results,
+                    const float threshold) {
   std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>,
   std::greater<std::pair<float, int> > >
   top_result_pq;
+  
+  std::vector<std::pair<float, int>> top_results;
   
   const long count = prediction_size;
   for (int i = 0; i < count; ++i) {
@@ -126,12 +132,26 @@ static void GetTopN(const float* prediction, const unsigned long prediction_size
   }
   
   while (!top_result_pq.empty()) {
-    top_results->push_back(top_result_pq.top());
+    top_results.push_back(top_result_pq.top());
     top_result_pq.pop();
   }
-  std::reverse(top_results->begin(), top_results->end());
+  std::reverse(top_results.begin(), top_results.end());
+  
+  NSMutableArray* predictions = [NSMutableArray array];
+  for (const auto& result : top_results) {
+    const float confidence = result.first;
+    const int index = result.second;
+    NSString* labelObject = [NSString stringWithUTF8String:labels[index].c_str()];
+    NSNumber* valueObject = [NSNumber numberWithFloat:confidence];
+    NSMutableDictionary* res = [NSMutableDictionary dictionary];
+    [res setValue:[NSNumber numberWithInt:index] forKey:@"index"];
+    [res setObject:labelObject forKey:@"label"];
+    [res setObject:valueObject forKey:@"confidence"];
+    [predictions addObject:res];
+  }
+  
+  return predictions;
 }
-
 
 NSMutableArray* runModelOnImage(NSDictionary* args) {
   const NSString* image_path = args[@"path"];
@@ -195,23 +215,50 @@ NSMutableArray* runModelOnImage(NSDictionary* args) {
   const unsigned long output_size = labels.size();
   const int kNumResults = [args[@"numResults"] intValue];
   const float kThreshold = [args[@"threshold"] floatValue];
-  std::vector<std::pair<float, int> > top_results;
-  GetTopN(output, output_size, kNumResults, kThreshold, &top_results);
+  return GetTopN(output, output_size, kNumResults, kThreshold);
+}
+
+NSMutableArray* runModelOnBinary(NSDictionary* args) {
+  FlutterStandardTypedData* typedData = args[@"binary"];
+  const int num_threads = [args[@"numThreads"] intValue];
+  NSMutableArray* empty = [@[] mutableCopy];
   
-  NSMutableArray* predictions = [NSMutableArray array];
-  for (const auto& result : top_results) {
-    const float confidence = result.first;
-    const int index = result.second;
-    NSString* labelObject = [NSString stringWithUTF8String:labels[index].c_str()];
-    NSNumber* valueObject = [NSNumber numberWithFloat:confidence];
-    NSMutableDictionary* res = [NSMutableDictionary dictionary];
-    [res setValue:[NSNumber numberWithInt:index] forKey:@"index"];
-    [res setObject:labelObject forKey:@"label"];
-    [res setObject:valueObject forKey:@"confidence"];
-    [predictions addObject:res];
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return empty;
   }
   
-  return predictions;
+  if (num_threads != -1) {
+    interpreter->SetNumThreads(num_threads);
+  }
+  
+  int input = interpreter->inputs()[0];
+  
+  if (interpreter->AllocateTensors() != kTfLiteOk) {
+    NSLog(@"Failed to allocate tensors.");
+    return empty;
+  }
+
+  float* out = interpreter->typed_tensor<float>(input);
+  NSData* in = [typedData data];
+  const float* bytes = (const float*)[in bytes];
+  for (int index = 0; index < [in length]/4; index++)
+    out[index] = bytes[index];
+
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return empty;
+  }
+  
+  float* output = interpreter->typed_output_tensor<float>(0);
+  
+  if (output == NULL)
+    return empty;
+  
+  const unsigned long output_size = labels.size();
+  const int kNumResults = [args[@"numResults"] intValue];
+  const float kThreshold = [args[@"threshold"] floatValue];
+  return GetTopN(output, output_size, kNumResults, kThreshold);
 }
 
 void close() {
