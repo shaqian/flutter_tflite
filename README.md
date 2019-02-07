@@ -116,7 +116,7 @@ Uint8List imageToByteList(Image image, int inputSize, double mean, double std) {
 ```dart
 var recognitions = await Tflite.detectObjectOnImage(
   path: filepath,       // required
-  model: "SSDMobileNet" 
+  model: "SSDMobileNet",
   imageMean: 127.5,     
   imageStd: 127.5,      
   threshold: 0.4,       // defaults to 0.1
@@ -129,7 +129,7 @@ var recognitions = await Tflite.detectObjectOnImage(
 ```dart
 var recognitions = await Tflite.detectObjectOnImage(
   path: filepath,       // required
-  model: "YOLO"         
+  model: "YOLO",      
   imageMean: 0.0,       
   imageStd: 255.0,      
   threshold: 0.3,       // defaults to 0.1
