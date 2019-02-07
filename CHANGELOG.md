@@ -1,3 +1,10 @@
+## 1.0.0
+
+* Support Object Detection with SSD MobileNet and Tiny Yolov2.
+* Updated to TensorFlow Lite API v1.12.0.
+* No longer accepts parameter `inputSize` and `numChannels`. They will be retrieved from input tensor.
+* `numThreads` is moved to `Tflite.loadModel`.
+
 ## 0.0.5
 
 * Support byte list: runModelOnBinary

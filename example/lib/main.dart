@@ -8,7 +8,20 @@ import 'package:image/image.dart' as img;
 import 'package:tflite/tflite.dart';
 import 'package:image_picker/image_picker.dart';
 
-void main() => runApp(new MyApp());
+void main() => runApp(new App());
+
+const String mobile = "MobileNet";
+const String ssd = "SSD MobileNet";
+const String yolo = "Tiny YOLOv2";
+
+class App extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: MyApp(),
+    );
+  }
+}
 
 class MyApp extends StatefulWidget {
   @override
@@ -18,11 +31,34 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   File _image;
   List _recognitions;
+  String _model = "";
+  double _imageHeight;
+  double _imageWidth;
 
   Future getImage() async {
-    var image = await ImagePicker.pickImage(source: ImageSource.camera);
-    recognizeImage(image);
-    // recognizeImageBinary(image);
+    var image = await ImagePicker.pickImage(source: ImageSource.gallery);
+
+    switch (_model) {
+      case yolo:
+        yolov2Tiny(image);
+        break;
+      case ssd:
+        ssdMobileNet(image);
+        break;
+      default:
+        recognizeImage(image);
+      // recognizeImageBinary(image);
+    }
+
+    new FileImage(image)
+        .resolve(new ImageConfiguration())
+        .addListener((ImageInfo info, bool _) {
+      setState(() {
+        _imageHeight = info.image.height.toDouble();
+        _imageWidth = info.image.width.toDouble();
+      });
+    });
+
     setState(() {
       _image = image;
     });
@@ -31,15 +67,29 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    loadModel();
   }
 
   Future loadModel() async {
     try {
-      String res = await Tflite.loadModel(
-        model: "assets/mobilenet_v1_1.0_224.tflite",
-        labels: "assets/labels.txt",
-      );
+      String res;
+      switch (_model) {
+        case yolo:
+          res = await Tflite.loadModel(
+            model: "assets/yolov2_tiny.tflite",
+            labels: "assets/yolov2_tiny.txt",
+          );
+          break;
+        case ssd:
+          res = await Tflite.loadModel(
+              model: "assets/ssd_mobilenet.tflite",
+              labels: "assets/ssd_mobilenet.txt");
+          break;
+        default:
+          res = await Tflite.loadModel(
+            model: "assets/mobilenet_v1_1.0_224.tflite",
+            labels: "assets/mobilenet_v1_1.0_224.txt",
+          );
+      }
       print(res);
     } on PlatformException {
       print('Failed to load model.');
@@ -70,7 +120,6 @@ class _MyAppState extends State<MyApp> {
       imageMean: 127.5,
       imageStd: 127.5,
     );
-    print(recognitions);
     setState(() {
       _recognitions = recognitions;
     });
@@ -85,49 +134,130 @@ class _MyAppState extends State<MyApp> {
       numResults: 6,
       threshold: 0.05,
     );
-    print(recognitions);
     setState(() {
       _recognitions = recognitions;
     });
   }
 
+  Future yolov2Tiny(File image) async {
+    var recognitions = await Tflite.detectObjectOnImage(
+      path: image.path,
+      model: "YOLO",
+      threshold: 0.3,
+      imageMean: 0.0,
+      imageStd: 255.0,
+      numResultsPerClass: 1,
+    );
+    setState(() {
+      _recognitions = recognitions;
+    });
+  }
+
+  Future ssdMobileNet(File image) async {
+    var recognitions = await Tflite.detectObjectOnImage(
+      path: image.path,
+      numResultsPerClass: 1,
+    );
+    setState(() {
+      _recognitions = recognitions;
+    });
+  }
+
+  onSelect(model) {
+    setState(() {
+      _model = model;
+    });
+    loadModel();
+  }
+
+  List<Widget> renderBoxes(Size screen) {
+    if (_recognitions == null) return [];
+    double factorX = screen.width;
+    double factorY = _imageHeight / _imageWidth * screen.width;
+    Color blue = Color.fromRGBO(37, 213, 253, 1.0);
+    return _recognitions.map((re) {
+      return Positioned(
+        left: re["rect"]["x"] * factorX,
+        top: re["rect"]["y"] * factorY,
+        width: re["rect"]["w"] * factorX,
+        height: re["rect"]["h"] * factorY,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: blue,
+              width: 2,
+            ),
+          ),
+          child: Text(
+            "${re["detectedClass"]} ${(re["confidenceInClass"] * 100).toStringAsFixed(0)}%",
+            style: TextStyle(
+              background: Paint()..color = blue,
+              color: Colors.white,
+              fontSize: 12.0,
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('tflite example app'),
-        ),
-        body: Stack(
-          children: <Widget>[
-            Center(
-              child: _image == null
-                  ? Text('No image selected.')
-                  : Image.file(_image),
-            ),
-            Center(
+    Size size = MediaQuery.of(context).size;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('tflite example app'),
+      ),
+      body: _model == ""
+          ? Center(
               child: Column(
-                children: _recognitions != null
-                    ? _recognitions.map((res) {
-                        return Text(
-                          "${res["index"]} - ${res["label"]}: ${res["confidence"].toString()}",
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 20.0,
-                            background: Paint()..color = Colors.white,
-                          ),
-                        );
-                      }).toList()
-                    : [],
+                children: <Widget>[
+                  RaisedButton(
+                    child: const Text(mobile),
+                    onPressed: () => onSelect(mobile),
+                  ),
+                  RaisedButton(
+                    child: const Text(ssd),
+                    onPressed: () => onSelect(ssd),
+                  ),
+                  RaisedButton(
+                    child: const Text(yolo),
+                    onPressed: () => onSelect(yolo),
+                  ),
+                ],
               ),
+            )
+          : Stack(
+              children: <Widget>[
+                Container(
+                  child: _image == null
+                      ? Text('No image selected.')
+                      : Image.file(_image),
+                ),
+                _model == mobile
+                    ? Center(
+                        child: Column(
+                          children: _recognitions != null
+                              ? _recognitions.map((res) {
+                                  return Text(
+                                    "${res["index"]} - ${res["label"]}: ${res["confidence"].toString()}",
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 20.0,
+                                      background: Paint()..color = Colors.white,
+                                    ),
+                                  );
+                                }).toList()
+                              : [],
+                        ),
+                      )
+                    : Stack(children: renderBoxes(size)),
+              ],
             ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: getImage,
-          tooltip: 'Pick Image',
-          child: Icon(Icons.add_a_photo),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: getImage,
+        tooltip: 'Pick Image',
+        child: Icon(Icons.image),
       ),
     );
   }
