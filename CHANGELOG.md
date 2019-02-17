@@ -1,3 +1,9 @@
+## 1.0.1
+
+* Add detectObjectOnBinary
+* Add runModelOnFrame
+* Add detectObjectOnFrame
+
 ## 1.0.0
 
 * Support Object Detection with SSD MobileNet and Tiny Yolov2.

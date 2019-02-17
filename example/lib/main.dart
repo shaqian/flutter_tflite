@@ -96,17 +96,32 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  Uint8List imageToByteList(
+  Uint8List imageToByteListFloat32(
       img.Image image, int inputSize, double mean, double std) {
     var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
     var buffer = Float32List.view(convertedBytes.buffer);
     int pixelIndex = 0;
     for (var i = 0; i < inputSize; i++) {
       for (var j = 0; j < inputSize; j++) {
-        var pixel = image.getPixel(i, j);
-        buffer[pixelIndex++] = (((pixel >> 16) & 0xFF) - mean) / std;
-        buffer[pixelIndex++] = (((pixel >> 8) & 0xFF) - mean) / std;
-        buffer[pixelIndex++] = (((pixel) & 0xFF) - mean) / std;
+        var pixel = image.getPixel(j, i);
+        buffer[pixelIndex++] = (img.getRed(pixel) - mean) / std;
+        buffer[pixelIndex++] = (img.getGreen(pixel) - mean) / std;
+        buffer[pixelIndex++] = (img.getBlue(pixel) - mean) / std;
+      }
+    }
+    return convertedBytes.buffer.asUint8List();
+  }
+
+  Uint8List imageToByteListUint8(img.Image image, int inputSize) {
+    var convertedBytes = Uint8List(1 * inputSize * inputSize * 3);
+    var buffer = Uint8List.view(convertedBytes.buffer);
+    int pixelIndex = 0;
+    for (var i = 0; i < inputSize; i++) {
+      for (var j = 0; j < inputSize; j++) {
+        var pixel = image.getPixel(j, i);
+        buffer[pixelIndex++] = img.getRed(pixel);
+        buffer[pixelIndex++] = img.getGreen(pixel);
+        buffer[pixelIndex++] = img.getBlue(pixel);
       }
     }
     return convertedBytes.buffer.asUint8List();
@@ -130,7 +145,7 @@ class _MyAppState extends State<MyApp> {
     img.Image oriImage = img.decodeJpg(imageBytes.asUint8List());
     img.Image resizedImage = img.copyResize(oriImage, 224, 224);
     var recognitions = await Tflite.runModelOnBinary(
-      binary: imageToByteList(resizedImage, 224, 127.5, 127.5),
+      binary: imageToByteListFloat32(resizedImage, 224, 127.5, 127.5),
       numResults: 6,
       threshold: 0.05,
     );
@@ -148,6 +163,15 @@ class _MyAppState extends State<MyApp> {
       imageStd: 255.0,
       numResultsPerClass: 1,
     );
+    // var imageBytes = (await rootBundle.load(image.path)).buffer;
+    // img.Image oriImage = img.decodeJpg(imageBytes.asUint8List());
+    // img.Image resizedImage = img.copyResize(oriImage, 416, 416);
+    // var recognitions = await Tflite.detectObjectOnBinary(
+    //   binary: imageToByteListFloat32(resizedImage, 416, 0.0, 255.0),
+    //   model: "YOLO",
+    //   threshold: 0.3,
+    //   numResultsPerClass: 1,
+    // );
     setState(() {
       _recognitions = recognitions;
     });
@@ -158,6 +182,13 @@ class _MyAppState extends State<MyApp> {
       path: image.path,
       numResultsPerClass: 1,
     );
+    // var imageBytes = (await rootBundle.load(image.path)).buffer;
+    // img.Image oriImage = img.decodeJpg(imageBytes.asUint8List());
+    // img.Image resizedImage = img.copyResize(oriImage, 300, 300);
+    // var recognitions = await Tflite.detectObjectOnBinary(
+    //   binary: imageToByteListUint8(resizedImage, 300),
+    //   numResultsPerClass: 1,
+    // );
     setState(() {
       _recognitions = recognitions;
     });

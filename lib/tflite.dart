@@ -45,6 +45,30 @@ class Tflite {
     );
   }
 
+  static Future<List> runModelOnFrame(
+      {@required List<Uint8List> bytesList,
+      int imageHeight = 1280,
+      int imageWidth = 720,
+      double imageMean = 127.5,
+      double imageStd = 127.5,
+      int rotation: 90, // Android only
+      int numResults = 5,
+      double threshold = 0.1}) async {
+    return await _channel.invokeMethod(
+      'runModelOnFrame',
+      {
+        "bytesList": bytesList,
+        "imageHeight": imageHeight,
+        "imageWidth": imageWidth,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+        "rotation": rotation,
+        "numResults": numResults,
+        "threshold": threshold
+      },
+    );
+  }
+
   static const anchors = [
     0.57273,
     0.677385,
@@ -77,6 +101,64 @@ class Tflite {
         "model": model,
         "imageMean": imageMean,
         "imageStd": imageStd,
+        "threshold": threshold,
+        "numResultsPerClass": numResultsPerClass,
+        "anchors": anchors,
+        "blockSize": blockSize,
+        "numBoxesPerBlock": numBoxesPerBlock
+      },
+    );
+  }
+
+  static Future<List> detectObjectOnBinary({
+    @required Uint8List binary,
+    String model = "SSDMobileNet",
+    double threshold = 0.1,
+    int numResultsPerClass = 5,
+    // Used in YOLO only
+    List anchors = anchors,
+    int blockSize = 32,
+    int numBoxesPerBlock = 5,
+  }) async {
+    return await _channel.invokeMethod(
+      'detectObjectOnBinary',
+      {
+        "binary": binary,
+        "model": model,
+        "threshold": threshold,
+        "numResultsPerClass": numResultsPerClass,
+        "anchors": anchors,
+        "blockSize": blockSize,
+        "numBoxesPerBlock": numBoxesPerBlock
+      },
+    );
+  }
+
+  static Future<List> detectObjectOnFrame({
+    @required List<Uint8List> bytesList,
+    String model = "SSDMobileNet",
+    int imageHeight = 1280,
+    int imageWidth = 720,
+    double imageMean = 127.5,
+    double imageStd = 127.5,
+    double threshold = 0.1,
+    int numResultsPerClass = 5,
+    int rotation: 90, // Android only
+    // Used in YOLO only
+    List anchors = anchors,
+    int blockSize = 32,
+    int numBoxesPerBlock = 5,
+  }) async {
+    return await _channel.invokeMethod(
+      'detectObjectOnFrame',
+      {
+        "bytesList": bytesList,
+        "model": model,
+        "imageHeight": imageHeight,
+        "imageWidth": imageWidth,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+        "rotation": rotation,
         "threshold": threshold,
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,

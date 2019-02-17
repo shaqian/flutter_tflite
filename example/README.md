@@ -6,8 +6,8 @@ Use tflite plugin to run model on images. The image is captured by camera or sel
 
 ## Prerequisites
 
-From https://github.com/shaqian/flutter_tflite/tree/master/example/assets
-dowload the following files and place them in ./assets folder.
+Create a `assets` folder. From https://github.com/shaqian/flutter_tflite/tree/master/example/assets
+dowload the following files and place them in `assets` folder.
  - mobilenet_v1_1.0_224.tflite
  - mobilenet_v1_1.0_224.txt
  - ssd_mobilenet.tflite

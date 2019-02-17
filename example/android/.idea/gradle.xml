@@ -10,7 +10,7 @@
             <option value="$PROJECT_DIR$/../../android" />
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
-            <option value="$USER_HOME$/flutter/.pub-cache/hosted/pub.dartlang.org/image_picker-0.4.10/android" />
+            <option value="$USER_HOME$/flutter/.pub-cache/hosted/pub.dartlang.org/image_picker-0.4.12+1/android" />
           </set>
         </option>
         <option name="resolveModulePerSourceSet" value="false" />
