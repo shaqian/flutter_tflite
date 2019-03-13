@@ -27,6 +27,7 @@ import org.tensorflow.lite.Tensor;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -119,6 +120,30 @@ public class TflitePlugin implements MethodCallHandler {
       }
     } else if (call.method.equals("close")) {
       close();
+    } else if (call.method.equals("runPix2PixOnImage")) {
+      try {
+        List<Map<String, Object>> res = runPix2PixOnImage((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
+    } else if (call.method.equals("runPix2PixOnBinary")) {
+      try {
+        List<Map<String, Object>> res = runPix2PixOnBinary((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
+    } else if (call.method.equals("runPix2PixOnFrame")) {
+      try {
+        List<Map<String, Object>> res = runPix2PixOnFrame((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
     }
   }
 
@@ -192,6 +217,35 @@ public class TflitePlugin implements MethodCallHandler {
     return recognitions;
   }
 
+  Bitmap feedOutput(ByteBuffer imgData, float mean, float std) {
+    Tensor tensor = tfLite.getOutputTensor(0);
+    int outputSize = tensor.shape()[1];
+    Bitmap bitmapRaw = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888);
+
+    if (tensor.dataType() == DataType.FLOAT32) {
+      for (int i = 0; i < outputSize; ++i) {
+        for (int j = 0; j < outputSize; ++j) {
+          int pixelValue = 0xFF << 24;
+          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF) << 16);
+          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF) << 8);
+          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF));
+          bitmapRaw.setPixel(j, i, pixelValue);
+        }
+      }
+    } else {
+      for (int i = 0; i < outputSize; ++i) {
+        for (int j = 0; j < outputSize; ++j) {
+          int pixelValue = 0xFF << 24;
+          pixelValue |= ((imgData.get() & 0xFF) << 16);
+          pixelValue |= ((imgData.get() & 0xFF) << 8);
+          pixelValue |= ((imgData.get() & 0xFF));
+          bitmapRaw.setPixel(j, i, pixelValue);
+        }
+      }
+    }
+    return bitmapRaw;
+  }
+
   ByteBuffer feedInputTensor(Bitmap bitmapRaw, float mean, float std) throws IOException {
     Tensor tensor = tfLite.getInputTensor(0);
     inputSize = tensor.shape()[1];
@@ -206,18 +260,20 @@ public class TflitePlugin implements MethodCallHandler {
     Bitmap bitmap = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888);
     final Canvas canvas = new Canvas(bitmap);
     canvas.drawBitmap(bitmapRaw, matrix, null);
-    int[] intValues = new int[inputSize * inputSize];
-    bitmap.getPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
 
-    int pixel = 0;
-    for (int i = 0; i < inputSize; ++i) {
-      for (int j = 0; j < inputSize; ++j) {
-        int pixelValue = intValues[pixel++];
-        if (tensor.dataType() == DataType.FLOAT32) {
+    if (tensor.dataType() == DataType.FLOAT32) {
+      for (int i = 0; i < inputSize; ++i) {
+        for (int j = 0; j < inputSize; ++j) {
+          int pixelValue = bitmap.getPixel(j, i);
           imgData.putFloat((((pixelValue >> 16) & 0xFF) - mean) / std);
           imgData.putFloat((((pixelValue >> 8) & 0xFF) - mean) / std);
           imgData.putFloat(((pixelValue & 0xFF) - mean) / std);
-        } else {
+        }
+      }
+    } else {
+      for (int i = 0; i < inputSize; ++i) {
+        for (int j = 0; j < inputSize; ++j) {
+          int pixelValue = bitmap.getPixel(j, i);
           imgData.put((byte)((pixelValue >> 16) & 0xFF));
           imgData.put((byte)((pixelValue >> 8) & 0xFF));
           imgData.put((byte)(pixelValue & 0xFF));
@@ -403,6 +459,89 @@ public class TflitePlugin implements MethodCallHandler {
     } else {
       return parseYOLO(imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS);
     }
+  }
+
+  private List<Map<String, Object>> runPix2PixOnImage(HashMap args) throws IOException {
+    String path = args.get("path").toString();
+    double mean = (double)(args.get("imageMean"));
+    float IMAGE_MEAN = (float)mean;
+    double std = (double)(args.get("imageStd"));
+    float IMAGE_STD = (float)std;
+
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
+    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    output.order(ByteOrder.nativeOrder());
+    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
+    tfLite.run(input, output);
+    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+
+    output.flip();
+    Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
+    String fileExt = path.substring(path.lastIndexOf('.')+1);
+    String outputFilename = path.substring(0, path.lastIndexOf('.')) + "_pix2pix." + fileExt;
+    try (FileOutputStream out = new FileOutputStream(outputFilename, false)) {
+      bitmapRaw.compress(Bitmap.CompressFormat.PNG, 100, out);
+    } catch (IOException e) {
+      e.printStackTrace();
+      outputFilename = "";
+    }
+
+    final ArrayList<Map<String, Object>> result = new ArrayList<>();
+    Map<String, Object> res = new HashMap<>();
+    res.put("filename", outputFilename);
+    result.add(res);
+    return result;
+  }
+
+  private List<Map<String, Object>> runPix2PixOnBinary(HashMap args) throws IOException {
+    byte[] binary = (byte[])args.get("binary");
+
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = ByteBuffer.wrap(binary);
+    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    output.order(ByteOrder.nativeOrder());
+
+    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
+    tfLite.run(input, output);
+    Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
+    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+
+    final ArrayList<Map<String, Object>> result = new ArrayList<>();
+    Map<String, Object> res = new HashMap<>();
+    res.put("binary", output);
+    result.add(res);
+    return result;
+  }
+
+  private List<Map<String, Object>> runPix2PixOnFrame(HashMap args) throws IOException {
+    List<byte[]> bytesList= (ArrayList)args.get("bytesList");
+    double mean = (double)(args.get("imageMean"));
+    float IMAGE_MEAN = (float)mean;
+    double std = (double)(args.get("imageStd"));
+    float IMAGE_STD = (float)std;
+    int imageHeight = (int)(args.get("imageHeight"));
+    int imageWidth = (int)(args.get("imageWidth"));
+    int rotation = (int)(args.get("rotation"));
+
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
+    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    output.order(ByteOrder.nativeOrder());
+
+    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
+    tfLite.run(input, output);
+    Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
+    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+
+    final ArrayList<Map<String, Object>> result = new ArrayList<>();
+    Map<String, Object> res = new HashMap<>();
+    res.put("binary", output);
+    result.add(res);
+    return result;
   }
 
   private List<Map<String, Object>> parseSSDMobileNet(ByteBuffer imgData, int numResultsPerClass, float threshold) {

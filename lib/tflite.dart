@@ -171,4 +171,46 @@ class Tflite {
   static Future close() async {
     return await _channel.invokeMethod('close');
   }
+
+  static Future<List> runPix2PixOnImage(
+      {@required String path,
+      double imageMean = 0,
+      double imageStd = 255.0}) async {
+    return await _channel.invokeMethod(
+      'runPix2PixOnImage',
+      {
+        "path": path,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+      },
+    );
+  }
+
+  static Future<List> runPix2PixOnBinary(
+      {@required Uint8List binary}) async {
+    return await _channel.invokeMethod(
+      'runPix2PixOnBinary', {"binary": binary},
+    );
+  }
+
+  static Future<List> runPix2PixOnFrame(
+      {@required List<Uint8List> bytesList,
+      int imageHeight = 1280,
+      int imageWidth = 720,
+      double imageMean = 0,
+      double imageStd = 255.0,
+      int rotation: 90, // Android only
+      }) async {
+    return await _channel.invokeMethod(
+      'runPix2PixOnFrame',
+      {
+        "bytesList": bytesList,
+        "imageHeight": imageHeight,
+        "imageWidth": imageWidth,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+        "rotation": rotation,
+      },
+    );
+  }
 }
