@@ -8,10 +8,10 @@
 #include <sstream>
 #include <string>
 
-#include "tensorflow/contrib/lite/kernels/register.h"
-#include "tensorflow/contrib/lite/model.h"
-#include "tensorflow/contrib/lite/string_util.h"
-#include "tensorflow/contrib/lite/op_resolver.h"
+#include "tensorflow/lite/kernels/register.h"
+#include "tensorflow/lite/model.h"
+#include "tensorflow/lite/string_util.h"
+#include "tensorflow/lite/op_resolver.h"
 
 #include "ios_image_load.h"
 
@@ -24,6 +24,9 @@ NSMutableArray* runModelOnFrame(NSDictionary* args);
 NSMutableArray* detectObjectOnImage(NSDictionary* args);
 NSMutableArray* detectObjectOnBinary(NSDictionary* args);
 NSMutableArray* detectObjectOnFrame(NSDictionary* args);
+NSMutableArray* runPix2PixOnImage(NSDictionary* args);
+NSMutableArray* runPix2PixOnBinary(NSDictionary* args);
+NSMutableArray* runPix2PixOnFrame(NSDictionary* args);
 void close();
 
 @implementation TflitePlugin {
@@ -68,6 +71,15 @@ void close();
   } else if ([@"detectObjectOnFrame" isEqualToString:call.method]) {
     NSMutableArray* inference_result = detectObjectOnFrame(call.arguments);
     result(inference_result);
+  } else if ([@"runPix2PixOnImage" isEqualToString:call.method]) {
+    NSMutableArray* generated_result = runPix2PixOnImage(call.arguments);
+    result(generated_result);
+  } else if ([@"runPix2PixOnBinary" isEqualToString:call.method]) {
+    NSMutableArray* generated_result = runPix2PixOnBinary(call.arguments);
+    result(generated_result);
+  } else if ([@"runPix2PixOnFrame" isEqualToString:call.method]) {
+    NSMutableArray* generated_result = runPix2PixOnFrame(call.arguments);
+    result(generated_result);
   } else if ([@"close" isEqualToString:call.method]) {
     close();
   } else {
@@ -127,6 +139,58 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
     interpreter->SetNumThreads(num_threads);
   }
   return @"success";
+}
+
+NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, bool convertToUint8,
+                                int *widthOut, int *heightOut) {
+  assert(interpreter->outputs().size() == 1);
+  int output = interpreter->outputs()[0];
+  TfLiteTensor* output_tensor = interpreter->tensor(output);
+  const int width = output_tensor->dims->data[2];
+  const int channels = output_tensor->dims->data[3];
+  const int outputChannels = outputChannelsIn ? outputChannelsIn : channels;
+  assert(outputChannels >= channels);
+  if (widthOut) *widthOut = width;
+  if (heightOut) *heightOut = width;
+
+  NSMutableData *data = nil;
+  if (output_tensor->type == kTfLiteUInt8) {
+    int size = width*width*outputChannels;
+    data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
+    uint8_t* out = (uint8_t*)[data bytes], *outEnd = out + width*width*outputChannels;
+    const uint8_t* bytes = interpreter->typed_tensor<uint8_t>(output);
+    while (out != outEnd) {
+      for (int c = 0; c < channels; c++)
+        *out++ = *bytes++;
+      for (int c = 0; c < outputChannels - channels; c++)
+        *out++ = 255;
+    }
+  } else { // kTfLiteFloat32
+    if (convertToUint8) {
+      int size = width*width*outputChannels;
+      data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
+      uint8_t* out = (uint8_t*)[data bytes], *outEnd = out + width*width*outputChannels;
+      const float* bytes = interpreter->typed_tensor<float>(output);
+      while (out != outEnd) {
+        for (int c = 0; c < channels; c++)
+          *out++ = (*bytes++ * std) + mean;
+        for (int c = 0; c < outputChannels - channels; c++)
+          *out++ = 255;
+      }
+    } else { // kTfLiteFloat32
+      int size = width*width*outputChannels*4;
+      data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
+      float* out = (float*)[data bytes], *outEnd = out + width*width*outputChannels;
+      const float* bytes = interpreter->typed_tensor<float>(output);
+      while (out != outEnd) {
+        for (int c = 0; c < channels; c++)
+          *out++ = (*bytes++ * std) + mean;
+        for (int c = 0; c < outputChannels - channels; c++)
+          *out++ = 255;
+      }
+    }
+  }
+  return data;
 }
 
 void feedInputTensorBinary(const FlutterStandardTypedData* typedData, int* input_size) {
@@ -599,6 +663,109 @@ NSMutableArray* detectObjectOnFrame(NSDictionary* args) {
   else
     return parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
                      threshold, input_size);
+}
+
+NSMutableArray* runPix2PixOnImage(NSDictionary* args) {
+  const NSString* image_path = args[@"path"];
+  const float input_mean = [args[@"imageMean"] floatValue];
+  const float input_std = [args[@"imageStd"] floatValue];
+
+  NSMutableArray* empty = [@[] mutableCopy];
+
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return empty;
+  }
+
+  int input_size;
+  feedInputTensorImage(image_path, input_mean, input_std, &input_size);
+
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return empty;
+  }
+
+  int width = 0, height = 0;
+  NSMutableData* output = feedOutputTensor(4, input_mean, input_std, true, &width, &height);
+  if (output == NULL)
+    return empty;
+
+  NSString *ext = image_path.pathExtension, *out_path = image_path.stringByDeletingPathExtension;
+  out_path = [NSString stringWithFormat:@"%@_pix2pix.%@", out_path, ext];
+  if (SaveImageToFile(output, [out_path UTF8String], width, height, 1)) {
+    NSMutableArray* results = [NSMutableArray array];
+    NSMutableDictionary* res = [NSMutableDictionary dictionary];
+    [res setObject:out_path forKey:@"filename"];
+    [results addObject:res];
+    return results;
+  }
+
+  return empty;
+}
+
+NSMutableArray* runPix2PixOnBinary(NSDictionary* args) {
+  const FlutterStandardTypedData* typedData = args[@"binary"];
+  NSMutableArray* empty = [@[] mutableCopy];
+
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return empty;
+  }
+
+  int input_size;
+  feedInputTensorBinary(typedData, &input_size);
+
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return empty;
+  }
+
+  int width = 0, height = 0;
+  NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
+  if (output == NULL)
+    return empty;
+
+  FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+  NSMutableArray* results = [NSMutableArray array];
+  NSMutableDictionary* res = [NSMutableDictionary dictionary];
+  [res setObject:ret forKey:@"binary"];
+  [results addObject:res];
+  return results;
+}
+
+NSMutableArray* runPix2PixOnFrame(NSDictionary* args) {
+  const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
+  const int image_height = [args[@"imageHeight"] intValue];
+  const int image_width = [args[@"imageWidth"] intValue];
+  const float input_mean = [args[@"imageMean"] floatValue];
+  const float input_std = [args[@"imageStd"] floatValue];
+  NSMutableArray* empty = [@[] mutableCopy];
+
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return empty;
+  }
+
+  int input_size;
+  int image_channels = 4;
+  feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
+
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return empty;
+  }
+
+  int width = 0, height = 0;
+  NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
+  if (output == NULL)
+    return empty;
+
+  FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+  NSMutableArray* results = [NSMutableArray array];
+  NSMutableDictionary* res = [NSMutableDictionary dictionary];
+  [res setObject:ret forKey:@"binary"];
+  [results addObject:res];
+  return results;
 }
 
 void close() {

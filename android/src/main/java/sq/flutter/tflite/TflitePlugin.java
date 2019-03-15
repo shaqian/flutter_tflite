@@ -226,9 +226,9 @@ public class TflitePlugin implements MethodCallHandler {
       for (int i = 0; i < outputSize; ++i) {
         for (int j = 0; j < outputSize; ++j) {
           int pixelValue = 0xFF << 24;
-          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF) << 16);
-          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF) << 8);
-          pixelValue |= ((Math.round(Math.min(1.0, Math.max(0.0, imgData.getFloat())) * std + mean) & 0xFF));
+          pixelValue |= ((Math.round(imgData.getFloat() * std + mean) & 0xFF) << 16);
+          pixelValue |= ((Math.round(imgData.getFloat() * std + mean) & 0xFF) << 8);
+          pixelValue |= ((Math.round(imgData.getFloat() * std + mean) & 0xFF));
           bitmapRaw.setPixel(j, i, pixelValue);
         }
       }
@@ -255,11 +255,14 @@ public class TflitePlugin implements MethodCallHandler {
     ByteBuffer imgData = ByteBuffer.allocateDirect(1 * inputSize * inputSize * inputChannels * bytePerChannel);
     imgData.order(ByteOrder.nativeOrder());
 
-    Matrix matrix = getTransformationMatrix(bitmapRaw.getWidth(), bitmapRaw.getHeight(),
-        inputSize, inputSize, false);
-    Bitmap bitmap = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888);
-    final Canvas canvas = new Canvas(bitmap);
-    canvas.drawBitmap(bitmapRaw, matrix, null);
+    Bitmap bitmap = bitmapRaw;
+    if (bitmapRaw.getWidth() != inputSize || bitmapRaw.getHeight() != inputSize) {
+      Matrix matrix = getTransformationMatrix(bitmapRaw.getWidth(), bitmapRaw.getHeight(),
+                                              inputSize, inputSize, false);
+      bitmap = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888);
+      final Canvas canvas = new Canvas(bitmap);
+      canvas.drawBitmap(bitmapRaw, matrix, null);
+    }
 
     if (tensor.dataType() == DataType.FLOAT32) {
       for (int i = 0; i < inputSize; ++i) {
@@ -470,12 +473,12 @@ public class TflitePlugin implements MethodCallHandler {
 
     long startTime = SystemClock.uptimeMillis();
     ByteBuffer input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
     output.order(ByteOrder.nativeOrder());
-    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
     if (output.position() != 0) throw new RuntimeException("Unexpected output position");
     tfLite.run(input, output);
-    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
 
     output.flip();
     Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
@@ -500,18 +503,18 @@ public class TflitePlugin implements MethodCallHandler {
 
     long startTime = SystemClock.uptimeMillis();
     ByteBuffer input = ByteBuffer.wrap(binary);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
     output.order(ByteOrder.nativeOrder());
 
-    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
     if (output.position() != 0) throw new RuntimeException("Unexpected output position");
     tfLite.run(input, output);
     Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
-    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
 
     final ArrayList<Map<String, Object>> result = new ArrayList<>();
     Map<String, Object> res = new HashMap<>();
-    res.put("binary", output);
+    res.put("binary", output.array());
     result.add(res);
     return result;
   }
@@ -528,18 +531,18 @@ public class TflitePlugin implements MethodCallHandler {
 
     long startTime = SystemClock.uptimeMillis();
     ByteBuffer input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.position());
+    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
     output.order(ByteOrder.nativeOrder());
 
-    if (input.position() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
     if (output.position() != 0) throw new RuntimeException("Unexpected output position");
     tfLite.run(input, output);
     Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
-    if (output.position() != input.position()) throw new RuntimeException("Mismatching input/output position");
+    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
 
     final ArrayList<Map<String, Object>> result = new ArrayList<>();
     Map<String, Object> res = new HashMap<>();
-    res.put("binary", output);
+    res.put("binary", output.array());
     result.add(res);
     return result;
   }
