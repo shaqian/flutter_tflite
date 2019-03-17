@@ -1,3 +1,4 @@
+#import <Flutter/Flutter.h>
 #include "ios_image_load.h"
 
 #include <stdlib.h>
@@ -69,4 +70,30 @@ std::vector<uint8_t> LoadImageFromFile(const char* file_name,
   *out_height = height;
   *out_channels = channels;
   return result;
+}
+
+BOOL SaveImageToFile(NSMutableData *image, const char* file_name, int width, int height, int bytesPerPixel) {
+  const int channels = 4;
+  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate([image mutableBytes], width, height,
+                                               bytesPerPixel*8, width*channels*bytesPerPixel, color_space,
+                                               kCGImageAlphaPremultipliedLast | (bytesPerPixel == 4 ? kCGBitmapFloatComponents : kCGBitmapByteOrder32Big));
+  CGColorSpaceRelease(color_space);
+  if (context == nil) return NO;
+
+  CGImageRef imgRef = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  if (imgRef == nil) return NO;
+
+  UIImage* img = [UIImage imageWithCGImage:imgRef];
+  CGImageRelease(imgRef);
+  if (img == nil) return NO;
+
+  NSData *data = UIImagePNGRepresentation(img);
+  if (data == nil) return NO;
+
+  FILE* file_handle = fopen(file_name, "wb");
+  BOOL ret = data.length == fwrite([data bytes], 1, data.length, file_handle);
+  fclose(file_handle);
+  return ret;
 }
