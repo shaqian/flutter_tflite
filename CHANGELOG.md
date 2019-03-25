@@ -1,3 +1,8 @@
+## 1.0.2
+
+* Add pix2pix support
+* Make number of detections dynamic in Android
+
 ## 1.0.1
 
 * Add detectObjectOnBinary

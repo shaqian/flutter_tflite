@@ -548,10 +548,10 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private List<Map<String, Object>> parseSSDMobileNet(ByteBuffer imgData, int numResultsPerClass, float threshold) {
-    int NUM_DETECTIONS = 10;
-    float[][][] outputLocations = new float[1][NUM_DETECTIONS][4];
-    float[][] outputClasses = new float[1][NUM_DETECTIONS];
-    float[][] outputScores = new float[1][NUM_DETECTIONS];
+    int num = tfLite.getOutputTensor(0).shape()[1];
+    float[][][] outputLocations = new float[1][num][4];
+    float[][] outputClasses = new float[1][num];
+    float[][] outputScores = new float[1][num];
     float[] numDetections = new float[1];
 
     Object[] inputArray = {imgData};
@@ -568,9 +568,9 @@ public class TflitePlugin implements MethodCallHandler {
     Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
 
     Map<String, Integer> counters = new HashMap<>();
-    final List<Map<String, Object>> results = new ArrayList<>(NUM_DETECTIONS);
+    final List<Map<String, Object>> results = new ArrayList<>();
 
-    for (int i = 0; i < NUM_DETECTIONS; ++i) {
+    for (int i = 0; i < numDetections[0]; ++i) {
       if (outputScores[0][i] < threshold) continue;
 
       String detectedClass = labels.get((int) outputClasses[0][i] + 1);

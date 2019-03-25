@@ -257,6 +257,62 @@ var recognitions = await Tflite.detectObjectOnFrame(
 );
 ```
 
+### pix2pix
+
+> Thanks to [RP](https://github.com/shaqian/flutter_tflite/pull/18) from [Green Appers](https://github.com/GreenAppers)
+
+- Run on image:
+
+```dart
+var result = await runPix2PixOnImage(
+  path: filepath,       // required
+  imageMean: 0.0,       // defaults to 0.0
+  imageStd: 255.0,      // defaults to 255.0
+);
+```
+
+Output:
+```
+{
+  "filename": outputFile
+}
+```
+
+- Run on binary:
+
+```dart
+var result = await runPix2PixOnBinary(
+  binary: binary,       // required;
+);
+```
+
+Output:
+```
+{
+  "binary": outputBinary
+}
+```
+
+- Run on image stream (video frame):
+
+```dart
+var result = await unPix2PixOnFrame(
+  bytesList: img.planes.map((plane) {return plane.bytes;}).toList(),// required
+  imageHeight: img.height, // defaults to 1280
+  imageWidth: img.width,   // defaults to 720
+  imageMean: 127.5,   // defaults to 0.0
+  imageStd: 127.5,    // defaults to 255.0
+  rotation: 90,       // defaults to 90, Android only
+);
+```
+
+Output:
+```
+{
+  "binary": outputBinary
+}
+```
+
 ## Demo
 
 - Classification and object detection
