@@ -32,7 +32,6 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   File _image;
   List _recognitions;
-  // TODO(see--) Switch to default mobile
   String _model = mobile;
   double _imageHeight;
   double _imageWidth;
