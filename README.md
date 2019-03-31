@@ -19,6 +19,7 @@ In `android/app/build.gradle`, add the following setting in `android` block.
 ```
     aaptOptions {
         noCompress 'tflite'
+        noCompress 'lite'
     }
 ```
 
