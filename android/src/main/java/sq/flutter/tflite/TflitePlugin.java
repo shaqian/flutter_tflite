@@ -28,6 +28,7 @@ import org.tensorflow.lite.Tensor;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Vector;
+
 
 public class TflitePlugin implements MethodCallHandler {
   private final Registrar mRegistrar;
@@ -144,6 +146,16 @@ public class TflitePlugin implements MethodCallHandler {
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
+    } else if (call.method.equals("runSegmentationOnImage")) {
+      try {
+        byte[] res = runSegmentationOnImage((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
+    } else {
+      result.error("Invalid method", call.method.toString(), "");
     }
   }
 
@@ -704,6 +716,85 @@ public class TflitePlugin implements MethodCallHandler {
       results.add(result);
     }
     return results;
+  }
+
+  private byte[] runSegmentationOnImage(HashMap args) throws IOException {
+    String path = args.get("path").toString();
+    double mean = (double)(args.get("imageMean"));
+    float IMAGE_MEAN = (float)mean;
+    double std = (double)(args.get("imageStd"));
+    float IMAGE_STD = (float)std;
+    List<Long> labelColors = (ArrayList)args.get("labelColors");
+
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
+    ByteBuffer output = ByteBuffer.allocateDirect(tfLite.getOutputTensor(0).numBytes());
+    output.order(ByteOrder.nativeOrder());
+    tfLite.run(input, output);
+    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != output.limit()) throw new RuntimeException("Unexpected output position");
+
+    output.flip();
+    Bitmap outputArgmax = fetchArgmax(output, labelColors);
+    return compressPNG(outputArgmax);
+  }
+
+
+  Bitmap fetchArgmax(ByteBuffer output, List<Long> labelColors) {
+    Tensor outputTensor = tfLite.getOutputTensor(0);
+    int outputBatchSize = outputTensor.shape()[0];
+    assert outputBatchSize == 1;
+    int outputHeight = outputTensor.shape()[1];
+    int outputWidth = outputTensor.shape()[2];
+    int outputChannels = outputTensor.shape()[3];
+
+    Bitmap outputArgmax = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888);
+
+    if (outputTensor.dataType() == DataType.FLOAT32) {
+      for (int i = 0; i < outputHeight; ++i) {
+        for (int j = 0; j < outputWidth; ++j) {
+          int maxIndex = 0;
+          float maxValue = 0.0f;
+          for (int c = 0; c < outputChannels; ++c) {
+            float outputValue = output.getFloat();
+            if (outputValue > maxValue) {
+              maxIndex = c;
+              maxValue = outputValue;
+            }
+          }
+          int labelColor = labelColors.get(maxIndex).intValue();
+          outputArgmax.setPixel(j, i, labelColor);
+        }
+      }
+    } else {
+      for (int i = 0; i < outputHeight; ++i) {
+        for (int j = 0; j < outputWidth; ++j) {
+          int maxIndex = 0;
+          int maxValue = 0;
+          for (int c = 0; c < outputChannels; ++c) {
+            int outputValue = output.get();
+            if (outputValue > maxValue) {
+              maxIndex = c;
+              maxValue = outputValue;
+            }
+          }
+          int labelColor = labelColors.get(maxIndex).intValue();
+          outputArgmax.setPixel(j, i, labelColor);
+        }
+      }
+    }
+    return outputArgmax;
+  }
+
+  byte[] compressPNG(Bitmap bitmap) {
+    // https://stackoverflow.com/questions/4989182/converting-java-bitmap-to-byte-array#4989543
+    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+    byte[] byteArray = stream.toByteArray();
+    // bitmap.recycle();
+    return byteArray;
   }
 
   private float expit(final float x) {

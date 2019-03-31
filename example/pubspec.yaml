@@ -50,6 +50,9 @@ flutter:
    - assets/yolov2_tiny.txt
    - assets/ssd_mobilenet.tflite
    - assets/ssd_mobilenet.txt
+   - assets/deeplabv3_257_mv_gpu.tflite
+   - assets/deeplabv3_257_mv_gpu.txt
+
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.io/assets-and-images/#resolution-aware.
