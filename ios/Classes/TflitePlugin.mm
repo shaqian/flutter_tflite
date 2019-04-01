@@ -26,19 +26,21 @@
 
 #define LOG(x) std::cerr
 
+typedef void (^TfLiteStatusCallback)(TfLiteStatus);
 NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* args);
-NSMutableArray* runModelOnImage(NSDictionary* args);
-NSMutableArray* runModelOnBinary(NSDictionary* args);
-NSMutableArray* runModelOnFrame(NSDictionary* args);
-NSMutableArray* detectObjectOnImage(NSDictionary* args);
-NSMutableArray* detectObjectOnBinary(NSDictionary* args);
-NSMutableArray* detectObjectOnFrame(NSDictionary* args);
-NSMutableArray* runPix2PixOnImage(NSDictionary* args);
-NSMutableArray* runPix2PixOnBinary(NSDictionary* args);
-NSMutableArray* runPix2PixOnFrame(NSDictionary* args);
-FlutterStandardTypedData* runSegmentationOnImage(NSDictionary* args);
-FlutterStandardTypedData* runSegmentationOnBinary(NSDictionary* args);
-FlutterStandardTypedData* runSegmentationOnFrame(NSDictionary* args);
+void runTfliteAsync(TfLiteStatusCallback cb);
+void runModelOnImage(NSDictionary* args, FlutterResult result);
+void runModelOnBinary(NSDictionary* args, FlutterResult result);
+void runModelOnFrame(NSDictionary* args, FlutterResult result);
+void detectObjectOnImage(NSDictionary* args, FlutterResult result);
+void detectObjectOnBinary(NSDictionary* args, FlutterResult result);
+void detectObjectOnFrame(NSDictionary* args, FlutterResult result);
+void runPix2PixOnImage(NSDictionary* args, FlutterResult result);
+void runPix2PixOnBinary(NSDictionary* args, FlutterResult result);
+void runPix2PixOnFrame(NSDictionary* args, FlutterResult result);
+void runSegmentationOnImage(NSDictionary* args, FlutterResult result);
+void runSegmentationOnBinary(NSDictionary* args, FlutterResult result);
+void runSegmentationOnFrame(NSDictionary* args, FlutterResult result);
 void close();
 
 @implementation TflitePlugin {
@@ -66,41 +68,29 @@ void close();
     NSString* load_result = loadModel(_registrar, call.arguments);
     result(load_result);
   } else if ([@"runModelOnImage" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = runModelOnImage(call.arguments);
-    result(inference_result);
+    runModelOnImage(call.arguments, result);
   } else if ([@"runModelOnBinary" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = runModelOnBinary(call.arguments);
-    result(inference_result);
+    runModelOnBinary(call.arguments, result);
   } else if ([@"runModelOnFrame" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = runModelOnFrame(call.arguments);
-    result(inference_result);
+    runModelOnFrame(call.arguments, result);
   } else if ([@"detectObjectOnImage" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = detectObjectOnImage(call.arguments);
-    result(inference_result);
+    detectObjectOnImage(call.arguments, result);
   } else if ([@"detectObjectOnBinary" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = detectObjectOnBinary(call.arguments);
-    result(inference_result);
+    detectObjectOnBinary(call.arguments, result);
   } else if ([@"detectObjectOnFrame" isEqualToString:call.method]) {
-    NSMutableArray* inference_result = detectObjectOnFrame(call.arguments);
-    result(inference_result);
+    detectObjectOnFrame(call.arguments, result);
   } else if ([@"runPix2PixOnImage" isEqualToString:call.method]) {
-    NSMutableArray* generated_result = runPix2PixOnImage(call.arguments);
-    result(generated_result);
+    runPix2PixOnImage(call.arguments, result);
   } else if ([@"runPix2PixOnBinary" isEqualToString:call.method]) {
-    NSMutableArray* generated_result = runPix2PixOnBinary(call.arguments);
-    result(generated_result);
+    runPix2PixOnBinary(call.arguments, result);
   } else if ([@"runPix2PixOnFrame" isEqualToString:call.method]) {
-    NSMutableArray* generated_result = runPix2PixOnFrame(call.arguments);
-    result(generated_result);
+    runPix2PixOnFrame(call.arguments, result);
   } else if ([@"runSegmentationOnImage" isEqualToString:call.method]) {
-    FlutterStandardTypedData* generated_result = runSegmentationOnImage(call.arguments);
-    result(generated_result);
+    runSegmentationOnImage(call.arguments, result);
   } else if ([@"runSegmentationOnBinary" isEqualToString:call.method]) {
-    FlutterStandardTypedData* generated_result = runSegmentationOnBinary(call.arguments);
-    result(generated_result);
+    runSegmentationOnBinary(call.arguments, result);
   } else if ([@"runSegmentationOnFrame" isEqualToString:call.method]) {
-    FlutterStandardTypedData* generated_result = runSegmentationOnFrame(call.arguments);
-    result(generated_result);
+    runSegmentationOnFrame(call.arguments, result);
   } else if ([@"close" isEqualToString:call.method]) {
     close();
   } else {
@@ -113,6 +103,7 @@ void close();
 std::vector<std::string> labels;
 std::unique_ptr<tflite::FlatBufferModel> model;
 std::unique_ptr<tflite::Interpreter> interpreter;
+bool interpreter_busy = false;
 
 static void LoadLabels(NSString* labels_path,
                        std::vector<std::string>* label_strings) {
@@ -160,6 +151,17 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
     interpreter->SetNumThreads(num_threads);
   }
   return @"success";
+}
+
+void runTfliteAsync(TfLiteStatusCallback cb) {
+  interpreter_busy = true;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
+    TfLiteStatus status = interpreter->Invoke();
+    dispatch_async(dispatch_get_main_queue(), ^(void){
+      interpreter_busy = false;
+      cb(status);
+    });
+  });
 }
 
 NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, bool convertToUint8,
@@ -335,67 +337,70 @@ NSMutableArray* GetTopN(const float* prediction, const unsigned long prediction_
   return predictions;
 }
 
-NSMutableArray* runModelOnImage(NSDictionary* args) {
+void runModelOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* image_path = args[@"path"];
   const float input_mean = [args[@"imageMean"] floatValue];
   const float input_std = [args[@"imageStd"] floatValue];
   
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
   
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  float* output = interpreter->typed_output_tensor<float>(0);
-  
-  if (output == NULL)
-    return empty;
-  
-  const unsigned long output_size = labels.size();
-  const int num_results = [args[@"numResults"] intValue];
-  const float threshold = [args[@"threshold"] floatValue];
-  return GetTopN(output, output_size, num_results, threshold);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    float* output = interpreter->typed_output_tensor<float>(0);
+
+    if (output == NULL)
+      return result(empty);
+
+    const unsigned long output_size = labels.size();
+    const int num_results = [args[@"numResults"] intValue];
+    const float threshold = [args[@"threshold"] floatValue];
+    return result(GetTopN(output, output_size, num_results, threshold));
+  });
 }
 
-NSMutableArray* runModelOnBinary(NSDictionary* args) {
+void runModelOnBinary(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"binary"];
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
 
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  float* output = interpreter->typed_output_tensor<float>(0);
-  
-  if (output == NULL)
-    return empty;
-  
-  const unsigned long output_size = labels.size();
-  const int num_results = [args[@"numResults"] intValue];
-  const float threshold = [args[@"threshold"] floatValue];
-  return GetTopN(output, output_size, num_results, threshold);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    float* output = interpreter->typed_output_tensor<float>(0);
+
+    if (output == NULL)
+      return result(empty);
+
+    const unsigned long output_size = labels.size();
+    const int num_results = [args[@"numResults"] intValue];
+    const float threshold = [args[@"threshold"] floatValue];
+    return result(GetTopN(output, output_size, num_results, threshold));
+  });
 }
 
-
-NSMutableArray* runModelOnFrame(NSDictionary* args) {
+void runModelOnFrame(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
   const int image_height = [args[@"imageHeight"] intValue];
   const int image_width = [args[@"imageWidth"] intValue];
@@ -403,29 +408,31 @@ NSMutableArray* runModelOnFrame(NSDictionary* args) {
   const float input_std = [args[@"imageStd"] floatValue];
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
   
   int input_size;
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  float* output = interpreter->typed_output_tensor<float>(0);
-  
-  if (output == NULL)
-    return empty;
-  
-  const unsigned long output_size = labels.size();
-  const int num_results = [args[@"numResults"] intValue];
-  const float threshold = [args[@"threshold"] floatValue];
-  return GetTopN(output, output_size, num_results, threshold);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    float* output = interpreter->typed_output_tensor<float>(0);
+
+    if (output == NULL)
+      return result(empty);
+
+    const unsigned long output_size = labels.size();
+    const int num_results = [args[@"numResults"] intValue];
+    const float threshold = [args[@"threshold"] floatValue];
+    return result(GetTopN(output, output_size, num_results, threshold));
+  });
 }
 
 NSMutableArray* parseSSDMobileNet(float threshold, int num_results_per_class) {
@@ -583,7 +590,7 @@ NSMutableArray* parseYOLO(int num_classes, const NSArray* anchors, int block_siz
   return results;
 }
 
-NSMutableArray* detectObjectOnImage(NSDictionary* args) {
+void detectObjectOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* image_path = args[@"path"];
   const NSString* model = args[@"model"];
   const float threshold = [args[@"threshold"] floatValue];
@@ -597,27 +604,29 @@ NSMutableArray* detectObjectOnImage(NSDictionary* args) {
   
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
   
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  if ([model isEqual: @"SSDMobileNet"])
-    return parseSSDMobileNet(threshold, num_results_per_class);
-  else
-    return parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
-                     threshold, input_size);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    if ([model isEqual: @"SSDMobileNet"])
+      return result(parseSSDMobileNet(threshold, num_results_per_class));
+    else
+      return result(parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
+                              threshold, input_size));
+  });
 }
 
-NSMutableArray* detectObjectOnBinary(NSDictionary* args) {
+void detectObjectOnBinary(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"binary"];
   const NSString* model = args[@"model"];
   const float threshold = [args[@"threshold"] floatValue];
@@ -629,27 +638,29 @@ NSMutableArray* detectObjectOnBinary(NSDictionary* args) {
   
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
   
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  if ([model isEqual: @"SSDMobileNet"])
-    return parseSSDMobileNet(threshold, num_results_per_class);
-  else
-    return parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
-                     threshold, input_size);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    if ([model isEqual: @"SSDMobileNet"])
+      return result(parseSSDMobileNet(threshold, num_results_per_class));
+    else
+      return result(parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
+                              threshold, input_size));
+  });
 }
 
-NSMutableArray* detectObjectOnFrame(NSDictionary* args) {
+void detectObjectOnFrame(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
   const NSString* model = args[@"model"];
   const int image_height = [args[@"imageHeight"] intValue];
@@ -665,96 +676,102 @@ NSMutableArray* detectObjectOnFrame(NSDictionary* args) {
   
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
   
   int input_size;
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-  
-  if ([model isEqual: @"SSDMobileNet"])
-    return parseSSDMobileNet(threshold, num_results_per_class);
-  else
-    return parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
-                     threshold, input_size);
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    if ([model isEqual: @"SSDMobileNet"])
+      return result(parseSSDMobileNet(threshold, num_results_per_class));
+    else
+      return result(parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
+                              threshold, input_size));
+  });
 }
 
-NSMutableArray* runPix2PixOnImage(NSDictionary* args) {
+void runPix2PixOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* image_path = args[@"path"];
   const float input_mean = [args[@"imageMean"] floatValue];
   const float input_std = [args[@"imageStd"] floatValue];
 
   NSMutableArray* empty = [@[] mutableCopy];
 
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
 
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
 
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    int width = 0, height = 0;
+    NSMutableData* output = feedOutputTensor(4, input_mean, input_std, true, &width, &height);
+    if (output == NULL)
+      return result(empty);
+
+    NSString *ext = image_path.pathExtension, *out_path = image_path.stringByDeletingPathExtension;
+    out_path = [NSString stringWithFormat:@"%@_pix2pix.%@", out_path, ext];
+    if (SaveImageToFile(output, [out_path UTF8String], width, height, 1)) {
+      NSMutableArray* results = [NSMutableArray array];
+      NSMutableDictionary* res = [NSMutableDictionary dictionary];
+      [res setObject:out_path forKey:@"filename"];
+      [results addObject:res];
+      return result(results);
+    }
+
+    return result(empty);
+  });
+}
+
+void runPix2PixOnBinary(NSDictionary* args, FlutterResult result) {
+  const FlutterStandardTypedData* typedData = args[@"binary"];
+  NSMutableArray* empty = [@[] mutableCopy];
+
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
 
-  int width = 0, height = 0;
-  NSMutableData* output = feedOutputTensor(4, input_mean, input_std, true, &width, &height);
-  if (output == NULL)
-    return empty;
+  int input_size;
+  feedInputTensorBinary(typedData, &input_size);
 
-  NSString *ext = image_path.pathExtension, *out_path = image_path.stringByDeletingPathExtension;
-  out_path = [NSString stringWithFormat:@"%@_pix2pix.%@", out_path, ext];
-  if (SaveImageToFile(output, [out_path UTF8String], width, height, 1)) {
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    int width = 0, height = 0;
+    NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
+    if (output == NULL)
+      return result(empty);
+
+    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
     NSMutableArray* results = [NSMutableArray array];
     NSMutableDictionary* res = [NSMutableDictionary dictionary];
-    [res setObject:out_path forKey:@"filename"];
+    [res setObject:ret forKey:@"binary"];
     [results addObject:res];
-    return results;
-  }
-
-  return empty;
+    return result(results);
+  });
 }
 
-NSMutableArray* runPix2PixOnBinary(NSDictionary* args) {
-  const FlutterStandardTypedData* typedData = args[@"binary"];
-  NSMutableArray* empty = [@[] mutableCopy];
-
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
-  }
-
-  int input_size;
-  feedInputTensorBinary(typedData, &input_size);
-
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
-
-  int width = 0, height = 0;
-  NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
-  if (output == NULL)
-    return empty;
-
-  FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
-  NSMutableArray* results = [NSMutableArray array];
-  NSMutableDictionary* res = [NSMutableDictionary dictionary];
-  [res setObject:ret forKey:@"binary"];
-  [results addObject:res];
-  return results;
-}
-
-NSMutableArray* runPix2PixOnFrame(NSDictionary* args) {
+void runPix2PixOnFrame(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
   const int image_height = [args[@"imageHeight"] intValue];
   const int image_width = [args[@"imageWidth"] intValue];
@@ -762,31 +779,33 @@ NSMutableArray* runPix2PixOnFrame(NSDictionary* args) {
   const float input_std = [args[@"imageStd"] floatValue];
   NSMutableArray* empty = [@[] mutableCopy];
 
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
-    return empty;
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
+    return result(empty);
   }
 
   int input_size;
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
 
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return empty;
-  }
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
 
-  int width = 0, height = 0;
-  NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
-  if (output == NULL)
-    return empty;
+    int width = 0, height = 0;
+    NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
+    if (output == NULL)
+      return result(empty);
 
-  FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
-  NSMutableArray* results = [NSMutableArray array];
-  NSMutableDictionary* res = [NSMutableDictionary dictionary];
-  [res setObject:ret forKey:@"binary"];
-  [results addObject:res];
-  return results;
+    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+    NSMutableArray* results = [NSMutableArray array];
+    NSMutableDictionary* res = [NSMutableDictionary dictionary];
+    [res setObject:ret forKey:@"binary"];
+    [results addObject:res];
+    return result(results);
+  });
 }
 
 void setPixel(char* rgba, int index, long color) {
@@ -866,55 +885,61 @@ NSData* fetchArgmax(const NSArray* labelColors, const NSString* outputType) {
   }
 }
 
-FlutterStandardTypedData* runSegmentationOnImage(NSDictionary* args) {
+void runSegmentationOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* image_path = args[@"path"];
   const float input_mean = [args[@"imageMean"] floatValue];
   const float input_std = [args[@"imageStd"] floatValue];
   const NSArray* labelColors = args[@"labelColors"];
   const NSString* outputType = args[@"outputType"];
+  NSMutableArray* empty = [@[] mutableCopy];
   
   if (!interpreter) {
     NSLog(@"Failed to construct interpreter.");
-    return nil;
+    return result(empty);
   }
   
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return nil;
-  }
-  
-  NSData* output = fetchArgmax(labelColors, outputType);
-  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
-  return result;
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    NSData* output = fetchArgmax(labelColors, outputType);
+    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+    return result(ret);
+  });
 }
 
-FlutterStandardTypedData* runSegmentationOnBinary(NSDictionary* args) {
+void runSegmentationOnBinary(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"binary"];
   const NSArray* labelColors = args[@"labelColors"];
   const NSString* outputType = args[@"outputType"];
+  NSMutableArray* empty = [@[] mutableCopy];
   
   if (!interpreter) {
     NSLog(@"Failed to construct interpreter.");
-    return nil;
+    return result(empty);
   }
   
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return nil;
-  }
-  
-  NSData* output = fetchArgmax(labelColors, outputType);
-  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
-  return result;
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    NSData* output = fetchArgmax(labelColors, outputType);
+    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+    return result(ret);
+  });
 }
 
-FlutterStandardTypedData* runSegmentationOnFrame(NSDictionary* args) {
+void runSegmentationOnFrame(NSDictionary* args, FlutterResult result) {
   const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
   const int image_height = [args[@"imageHeight"] intValue];
   const int image_width = [args[@"imageWidth"] intValue];
@@ -922,24 +947,27 @@ FlutterStandardTypedData* runSegmentationOnFrame(NSDictionary* args) {
   const float input_std = [args[@"imageStd"] floatValue];
   const NSArray* labelColors = args[@"labelColors"];
   const NSString* outputType = args[@"outputType"];
+  NSMutableArray* empty = [@[] mutableCopy];
   
   if (!interpreter) {
     NSLog(@"Failed to construct interpreter.");
-    return nil;
+    return result(empty);
   }
   
   int input_size;
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  if (interpreter->Invoke() != kTfLiteOk) {
-    NSLog(@"Failed to invoke!");
-    return nil;
-  }
-  
-  NSData* output = fetchArgmax(labelColors, outputType);
-  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
-  return result;
+  runTfliteAsync(^(TfLiteStatus status) {
+    if (status != kTfLiteOk) {
+      NSLog(@"Failed to invoke!");
+      return result(empty);
+    }
+
+    NSData* output = fetchArgmax(labelColors, outputType);
+    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
+    return result(ret);
+  });
 }
 
 void close() {
