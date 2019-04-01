@@ -899,15 +899,15 @@ void runSegmentationOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* outputType = args[@"outputType"];
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
     return result(empty);
   }
   
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -925,15 +925,15 @@ void runSegmentationOnBinary(NSDictionary* args, FlutterResult result) {
   const NSString* outputType = args[@"outputType"];
   NSMutableArray* empty = [@[] mutableCopy];
   
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
     return result(empty);
   }
   
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -954,9 +954,9 @@ void runSegmentationOnFrame(NSDictionary* args, FlutterResult result) {
   const NSArray* labelColors = args[@"labelColors"];
   const NSString* outputType = args[@"outputType"];
   NSMutableArray* empty = [@[] mutableCopy];
-  
-  if (!interpreter) {
-    NSLog(@"Failed to construct interpreter.");
+
+  if (!interpreter || interpreter_busy) {
+    NSLog(@"Failed to construct interpreter or busy.");
     return result(empty);
   }
   
@@ -964,7 +964,7 @@ void runSegmentationOnFrame(NSDictionary* args, FlutterResult result) {
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
