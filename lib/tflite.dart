@@ -22,7 +22,8 @@ class Tflite {
       double imageMean = 117.0,
       double imageStd = 1.0,
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnImage',
       {
@@ -30,7 +31,8 @@ class Tflite {
         "imageMean": imageMean,
         "imageStd": imageStd,
         "numResults": numResults,
-        "threshold": threshold
+        "threshold": threshold,
+        "asynch": asynch,
       },
     );
   }
@@ -38,10 +40,16 @@ class Tflite {
   static Future<List> runModelOnBinary(
       {@required Uint8List binary,
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnBinary',
-      {"binary": binary, "numResults": numResults, "threshold": threshold},
+      {
+        "binary": binary,
+        "numResults": numResults,
+        "threshold": threshold,
+        "asynch": asynch,
+      },
     );
   }
 
@@ -53,7 +61,8 @@ class Tflite {
       double imageStd = 127.5,
       int rotation: 90, // Android only
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnFrame',
       {
@@ -64,7 +73,8 @@ class Tflite {
         "imageStd": imageStd,
         "rotation": rotation,
         "numResults": numResults,
-        "threshold": threshold
+        "threshold": threshold,
+        "asynch": asynch,
       },
     );
   }
@@ -93,6 +103,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnImage',
@@ -105,7 +116,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -119,6 +131,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnBinary',
@@ -129,7 +142,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -148,6 +162,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnFrame',
@@ -163,7 +178,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -175,21 +191,28 @@ class Tflite {
   static Future<List> runPix2PixOnImage(
       {@required String path,
       double imageMean = 0,
-      double imageStd = 255.0}) async {
+      double imageStd = 255.0,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnImage',
       {
         "path": path,
         "imageMean": imageMean,
         "imageStd": imageStd,
+        "asynch": asynch,
       },
     );
   }
 
   static Future<List> runPix2PixOnBinary(
-      {@required Uint8List binary}) async {
+      {@required Uint8List binary,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
-      'runPix2PixOnBinary', {"binary": binary},
+      'runPix2PixOnBinary',
+      {
+        "binary": binary,
+        "asynch": asynch,
+      },
     );
   }
 
@@ -200,6 +223,7 @@ class Tflite {
       double imageMean = 0,
       double imageStd = 255.0,
       int rotation: 90, // Android only
+      bool asynch = true
       }) async {
     return await _channel.invokeMethod(
       'runPix2PixOnFrame',
@@ -210,6 +234,7 @@ class Tflite {
         "imageMean": imageMean,
         "imageStd": imageStd,
         "rotation": rotation,
+        "asynch": asynch,
       },
     );
   }

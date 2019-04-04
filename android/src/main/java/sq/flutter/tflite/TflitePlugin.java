@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.os.SystemClock;
 import android.renderscript.Allocation;
 import android.renderscript.Element;
@@ -46,6 +47,7 @@ import java.util.Vector;
 public class TflitePlugin implements MethodCallHandler {
   private final Registrar mRegistrar;
   private Interpreter tfLite;
+  private boolean tfLiteBusy = false;
   private int inputSize = 0;
   private Vector<String> labels;
   float[][] labelProb;
@@ -72,48 +74,42 @@ public class TflitePlugin implements MethodCallHandler {
       }
     } else if (call.method.equals("runModelOnImage")) {
       try {
-        List<Map<String, Object>> res = runModelOnImage((HashMap) call.arguments);
-        result.success(res);
+        new RunModelOnImage((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("runModelOnBinary")) {
       try {
-        List<Map<String, Object>> res = runModelOnBinary((HashMap) call.arguments);
-        result.success(res);
+        new RunModelOnBinary((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("runModelOnFrame")) {
       try {
-        List<Map<String, Object>> res = runModelOnFrame((HashMap) call.arguments);
-        result.success(res);
+        new RunModelOnFrame((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("detectObjectOnImage")) {
       try {
-        List<Map<String, Object>> res = detectObjectOnImage((HashMap) call.arguments);
-        result.success(res);
+        detectObjectOnImage((HashMap) call.arguments, result);
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("detectObjectOnBinary")) {
       try {
-        List<Map<String, Object>> res = detectObjectOnBinary((HashMap) call.arguments);
-        result.success(res);
+        detectObjectOnBinary((HashMap) call.arguments, result);
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("detectObjectOnFrame")) {
       try {
-        List<Map<String, Object>> res = detectObjectOnFrame((HashMap) call.arguments);
-        result.success(res);
+        detectObjectOnFrame((HashMap) call.arguments, result);
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
@@ -122,24 +118,21 @@ public class TflitePlugin implements MethodCallHandler {
       close();
     } else if (call.method.equals("runPix2PixOnImage")) {
       try {
-        List<Map<String, Object>> res = runPix2PixOnImage((HashMap) call.arguments);
-        result.success(res);
+        new RunPix2PixOnImage((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("runPix2PixOnBinary")) {
       try {
-        List<Map<String, Object>> res = runPix2PixOnBinary((HashMap) call.arguments);
-        result.success(res);
+        new RunPix2PixOnBinary((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
     } else if (call.method.equals("runPix2PixOnFrame")) {
       try {
-        List<Map<String, Object>> res = runPix2PixOnFrame((HashMap) call.arguments);
-        result.success(res);
+        new RunPix2PixOnFrame((HashMap) call.arguments, result).executeTfliteTask();
       }
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
@@ -342,60 +335,130 @@ public class TflitePlugin implements MethodCallHandler {
     return out;
   }
 
-  private List<Map<String, Object>> runModelOnImage(HashMap args) throws IOException {
-    String path = args.get("path").toString();
-    double mean = (double)(args.get("imageMean"));
-    float IMAGE_MEAN = (float)mean;
-    double std = (double)(args.get("imageStd"));
-    float IMAGE_STD = (float)std;
-    int NUM_RESULTS = (int)args.get("numResults");
-    double threshold = (double)args.get("threshold");
-    float THRESHOLD = (float)threshold;
+  private abstract class TfliteTask extends AsyncTask<Void, Void, Void> {
+    Result result;
+    boolean asynch;
 
-    long startTime = SystemClock.uptimeMillis();
-    tfLite.run(feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD), labelProb);
-    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+    TfliteTask(HashMap args, Result result) {
+      if (tfLiteBusy) throw new RuntimeException("Interpreter busy");
+      else tfLiteBusy = true;
+      Object asynch = args.get("asynch");
+      this.asynch = asynch == null ? false : (boolean)asynch;
+      this.result = result;
+    }
 
-    return GetTopN(NUM_RESULTS, THRESHOLD);
+    abstract void runTflite();
+
+    abstract void onRunTfliteDone();
+
+    public void executeTfliteTask() {
+      if (asynch) execute();
+      else {
+        runTflite();
+        tfLiteBusy = false;
+        onRunTfliteDone();
+      }
+    }
+
+    protected Void doInBackground(Void... backgroundArguments) {
+      runTflite();
+      return null;
+    }
+
+    protected void onPostExecute(Void backgroundResult) {
+      tfLiteBusy = false;
+      onRunTfliteDone();
+    }
   }
 
-  private List<Map<String, Object>> runModelOnBinary(HashMap args) throws IOException {
-    byte[] binary = (byte[])args.get("binary");
-    int NUM_RESULTS = (int)args.get("numResults");
-    double threshold = (double)args.get("threshold");
-    float THRESHOLD = (float)threshold;
+  private class RunModelOnImage extends TfliteTask {
+    int NUM_RESULTS;
+    float THRESHOLD;
+    ByteBuffer input;
+    long startTime;
 
-    ByteBuffer imgData = ByteBuffer.wrap(binary);
-    tfLite.run(imgData, labelProb);
+    RunModelOnImage(HashMap args, Result result) throws IOException {
+      super(args, result);
 
-    return GetTopN(NUM_RESULTS, THRESHOLD);
+      String path = args.get("path").toString();
+      double mean = (double)(args.get("imageMean"));
+      float IMAGE_MEAN = (float)mean;
+      double std = (double)(args.get("imageStd"));
+      float IMAGE_STD = (float)std;
+      NUM_RESULTS = (int)args.get("numResults");
+      double threshold = (double)args.get("threshold");
+      THRESHOLD = (float)threshold;
+
+      startTime = SystemClock.uptimeMillis();
+      input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
+    }
+
+    protected void runTflite() { tfLite.run(input, labelProb); }
+
+    protected void onRunTfliteDone() {
+      Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+      result.success(GetTopN(NUM_RESULTS, THRESHOLD));
+    }
   }
 
-  private List<Map<String, Object>> runModelOnFrame(HashMap args) throws IOException {
-    List<byte[]> bytesList= (ArrayList)args.get("bytesList");
-    double mean = (double)(args.get("imageMean"));
-    float IMAGE_MEAN = (float)mean;
-    double std = (double)(args.get("imageStd"));
-    float IMAGE_STD = (float)std;
-    int imageHeight = (int)(args.get("imageHeight"));
-    int imageWidth = (int)(args.get("imageWidth"));
-    int rotation = (int)(args.get("rotation"));
-    int NUM_RESULTS = (int)args.get("numResults");
-    double threshold = (double)args.get("threshold");
-    float THRESHOLD = (float)threshold;
+  private class RunModelOnBinary extends TfliteTask {
+    int NUM_RESULTS;
+    float THRESHOLD;
+    ByteBuffer imgData;
 
-    long startTime = SystemClock.uptimeMillis();
+    RunModelOnBinary(HashMap args, Result result) throws IOException {
+      super(args, result);
 
-    ByteBuffer imgData = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
+      byte[] binary = (byte[])args.get("binary");
+      NUM_RESULTS = (int)args.get("numResults");
+      double threshold = (double)args.get("threshold");
+      THRESHOLD = (float)threshold;
 
-    tfLite.run(imgData, labelProb);
+      imgData = ByteBuffer.wrap(binary);
+    }
 
-    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+    protected void runTflite() { tfLite.run(imgData, labelProb); }
 
-    return GetTopN(NUM_RESULTS, THRESHOLD);
+    protected void onRunTfliteDone() {
+      result.success(GetTopN(NUM_RESULTS, THRESHOLD));
+    }
   }
 
-  private List<Map<String, Object>> detectObjectOnImage(HashMap args) throws IOException {
+  private class RunModelOnFrame extends TfliteTask {
+    int NUM_RESULTS;
+    float THRESHOLD;
+    long startTime;
+    ByteBuffer imgData;
+
+    RunModelOnFrame(HashMap args, Result result) throws IOException {
+      super(args, result);
+
+      List<byte[]> bytesList= (ArrayList)args.get("bytesList");
+      double mean = (double)(args.get("imageMean"));
+      float IMAGE_MEAN = (float)mean;
+      double std = (double)(args.get("imageStd"));
+      float IMAGE_STD = (float)std;
+      int imageHeight = (int)(args.get("imageHeight"));
+      int imageWidth = (int)(args.get("imageWidth"));
+      int rotation = (int)(args.get("rotation"));
+      NUM_RESULTS = (int)args.get("numResults");
+      double threshold = (double)args.get("threshold");
+      THRESHOLD = (float)threshold;
+
+      startTime = SystemClock.uptimeMillis();
+
+      imgData = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
+    }
+
+    protected void runTflite() { tfLite.run(imgData, labelProb); }
+
+    protected void onRunTfliteDone() {
+      Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+      result.success(GetTopN(NUM_RESULTS, THRESHOLD));
+    }
+  }
+
+  void detectObjectOnImage(HashMap args, Result result) throws IOException {
     String path = args.get("path").toString();
     String model = args.get("model").toString();
     double mean = (double)(args.get("imageMean"));
@@ -412,13 +475,13 @@ public class TflitePlugin implements MethodCallHandler {
     ByteBuffer imgData = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
 
     if (model.equals("SSDMobileNet")) {
-      return parseSSDMobileNet(imgData, NUM_RESULTS_PER_CLASS, THRESHOLD);
+      new RunSSDMobileNet(args, imgData, NUM_RESULTS_PER_CLASS, THRESHOLD, result).executeTfliteTask();
     } else {
-      return parseYOLO(imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS);
+      new RunYOLO(args, imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS, result).executeTfliteTask();
     }
   }
 
-  private List<Map<String, Object>> detectObjectOnBinary(HashMap args) throws IOException {
+  void detectObjectOnBinary(HashMap args, Result result) throws IOException {
     byte[] binary = (byte[])args.get("binary");
     String model = args.get("model").toString();
     double threshold = (double)args.get("threshold");
@@ -431,13 +494,13 @@ public class TflitePlugin implements MethodCallHandler {
     ByteBuffer imgData = ByteBuffer.wrap(binary);
 
     if (model.equals("SSDMobileNet")) {
-      return parseSSDMobileNet(imgData, NUM_RESULTS_PER_CLASS, THRESHOLD);
+      new RunSSDMobileNet(args, imgData, NUM_RESULTS_PER_CLASS, THRESHOLD, result).executeTfliteTask();
     } else {
-      return parseYOLO(imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS);
+      new RunYOLO(args, imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS, result).executeTfliteTask();
     }
   }
 
-  private List<Map<String, Object>> detectObjectOnFrame(HashMap args) throws IOException {
+  void detectObjectOnFrame(HashMap args, Result result) throws IOException {
     List<byte[]> bytesList= (ArrayList)args.get("bytesList");
     String model = args.get("model").toString();
     double mean = (double)(args.get("imageMean"));
@@ -458,252 +521,326 @@ public class TflitePlugin implements MethodCallHandler {
     ByteBuffer imgData = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
 
     if (model.equals("SSDMobileNet")) {
-      return parseSSDMobileNet(imgData, NUM_RESULTS_PER_CLASS, THRESHOLD);
+      new RunSSDMobileNet(args, imgData, NUM_RESULTS_PER_CLASS, THRESHOLD, result).executeTfliteTask();
     } else {
-      return parseYOLO(imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS);
+      new RunYOLO(args, imgData, BLOCK_SIZE, NUM_BOXES_PER_BLOCK, ANCHORS, THRESHOLD, NUM_RESULTS_PER_CLASS, result).executeTfliteTask();
     }
   }
 
-  private List<Map<String, Object>> runPix2PixOnImage(HashMap args) throws IOException {
-    String path = args.get("path").toString();
-    double mean = (double)(args.get("imageMean"));
-    float IMAGE_MEAN = (float)mean;
-    double std = (double)(args.get("imageStd"));
-    float IMAGE_STD = (float)std;
+  private class RunPix2PixOnImage extends TfliteTask {
+    String path;
+    float IMAGE_MEAN, IMAGE_STD;
+    ByteBuffer input, output;
 
-    long startTime = SystemClock.uptimeMillis();
-    ByteBuffer input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
-    output.order(ByteOrder.nativeOrder());
-    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
-    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
-    tfLite.run(input, output);
-    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
+    RunPix2PixOnImage(HashMap args, Result result) throws IOException {
+      super(args, result);
+      path = args.get("path").toString();
+      double mean = (double)(args.get("imageMean"));
+      IMAGE_MEAN = (float)mean;
+      double std = (double)(args.get("imageStd"));
+      IMAGE_STD = (float)std;
 
-    output.flip();
-    Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
-    String fileExt = path.substring(path.lastIndexOf('.')+1);
-    String outputFilename = path.substring(0, path.lastIndexOf('.')) + "_pix2pix." + fileExt;
-    try (FileOutputStream out = new FileOutputStream(outputFilename, false)) {
-      bitmapRaw.compress(Bitmap.CompressFormat.PNG, 100, out);
-    } catch (IOException e) {
-      e.printStackTrace();
-      outputFilename = "";
+      long startTime = SystemClock.uptimeMillis();
+      input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
+      output = ByteBuffer.allocateDirect(input.limit());
+      output.order(ByteOrder.nativeOrder());
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != 0) { result.error("Unexpected output position", null, null); return; }
     }
 
-    final ArrayList<Map<String, Object>> result = new ArrayList<>();
-    Map<String, Object> res = new HashMap<>();
-    res.put("filename", outputFilename);
-    result.add(res);
-    return result;
-  }
+    protected void runTflite() { tfLite.run(input, output); }
 
-  private List<Map<String, Object>> runPix2PixOnBinary(HashMap args) throws IOException {
-    byte[] binary = (byte[])args.get("binary");
+    protected void onRunTfliteDone() {
+      if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
 
-    long startTime = SystemClock.uptimeMillis();
-    ByteBuffer input = ByteBuffer.wrap(binary);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
-    output.order(ByteOrder.nativeOrder());
-
-    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
-    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
-    tfLite.run(input, output);
-    Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
-    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
-
-    final ArrayList<Map<String, Object>> result = new ArrayList<>();
-    Map<String, Object> res = new HashMap<>();
-    res.put("binary", output.array());
-    result.add(res);
-    return result;
-  }
-
-  private List<Map<String, Object>> runPix2PixOnFrame(HashMap args) throws IOException {
-    List<byte[]> bytesList= (ArrayList)args.get("bytesList");
-    double mean = (double)(args.get("imageMean"));
-    float IMAGE_MEAN = (float)mean;
-    double std = (double)(args.get("imageStd"));
-    float IMAGE_STD = (float)std;
-    int imageHeight = (int)(args.get("imageHeight"));
-    int imageWidth = (int)(args.get("imageWidth"));
-    int rotation = (int)(args.get("rotation"));
-
-    long startTime = SystemClock.uptimeMillis();
-    ByteBuffer input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
-    ByteBuffer output = ByteBuffer.allocateDirect(input.limit());
-    output.order(ByteOrder.nativeOrder());
-
-    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
-    if (output.position() != 0) throw new RuntimeException("Unexpected output position");
-    tfLite.run(input, output);
-    Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
-    if (output.position() != input.limit()) throw new RuntimeException("Mismatching input/output position");
-
-    final ArrayList<Map<String, Object>> result = new ArrayList<>();
-    Map<String, Object> res = new HashMap<>();
-    res.put("binary", output.array());
-    result.add(res);
-    return result;
-  }
-
-  private List<Map<String, Object>> parseSSDMobileNet(ByteBuffer imgData, int numResultsPerClass, float threshold) {
-    int num = tfLite.getOutputTensor(0).shape()[1];
-    float[][][] outputLocations = new float[1][num][4];
-    float[][] outputClasses = new float[1][num];
-    float[][] outputScores = new float[1][num];
-    float[] numDetections = new float[1];
-
-    Object[] inputArray = {imgData};
-    Map<Integer, Object> outputMap = new HashMap<>();
-    outputMap.put(0, outputLocations);
-    outputMap.put(1, outputClasses);
-    outputMap.put(2, outputScores);
-    outputMap.put(3, numDetections);
-
-    long startTime = SystemClock.uptimeMillis();
-
-    tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
-
-    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
-
-    Map<String, Integer> counters = new HashMap<>();
-    final List<Map<String, Object>> results = new ArrayList<>();
-
-    for (int i = 0; i < numDetections[0]; ++i) {
-      if (outputScores[0][i] < threshold) continue;
-
-      String detectedClass = labels.get((int) outputClasses[0][i] + 1);
-
-      if (counters.get(detectedClass) == null) {
-        counters.put(detectedClass, 1);
-      } else {
-        int count = counters.get(detectedClass);
-        if (count >= numResultsPerClass) {
-          continue;
-        } else {
-          counters.put(detectedClass, count + 1);
-        }
+      output.flip();
+      Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
+      String fileExt = path.substring(path.lastIndexOf('.')+1);
+      String outputFilename = path.substring(0, path.lastIndexOf('.')) + "_pix2pix." + fileExt;
+      try (FileOutputStream out = new FileOutputStream(outputFilename, false)) {
+        bitmapRaw.compress(Bitmap.CompressFormat.PNG, 100, out);
+      } catch (IOException e) {
+        e.printStackTrace();
+        outputFilename = "";
       }
 
-      Map<String, Object> rect = new HashMap<>();
-      float ymin = Math.max(0, outputLocations[0][i][0]);
-      float xmin = Math.max(0, outputLocations[0][i][1]);
-      float ymax = outputLocations[0][i][2];
-      float xmax = outputLocations[0][i][3];
-      rect.put("x", xmin);
-      rect.put("y", ymin);
-      rect.put("w", Math.min(1 - xmin, xmax - xmin));
-      rect.put("h", Math.min(1 - ymin, ymax - ymin));
-
-      Map<String, Object> result = new HashMap<>();
-      result.put("rect", rect);
-      result.put("confidenceInClass", outputScores[0][i]);
-      result.put("detectedClass", detectedClass);
-
-      results.add(result);
+      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
+      Map<String, Object> res = new HashMap<>();
+      res.put("filename", outputFilename);
+      ret.add(res);
+      result.success(ret);
     }
-
-    return results;
   }
 
-  private List<Map<String, Object>> parseYOLO(ByteBuffer imgData,
-                                              int blockSize,
-                                              int numBoxesPerBlock,
-                                              List<Double> anchors,
-                                              float threshold,
-                                              int numResultsPerClass) {
-    long startTime = SystemClock.uptimeMillis();
+  private class RunPix2PixOnBinary extends TfliteTask {
+    long startTime;
+    ByteBuffer input, output;
 
-    Tensor tensor = tfLite.getInputTensor(0);
-    inputSize = tensor.shape()[1];
-    int gridSize = inputSize / blockSize;
-    int numClasses = labels.size();
-    final float[][][][] output = new float[1][gridSize][gridSize][(numClasses + 5) * numBoxesPerBlock];
-    tfLite.run(imgData, output);
+    RunPix2PixOnBinary(HashMap args, Result result) throws IOException {
+      super(args, result);
+      byte[] binary = (byte[])args.get("binary");
+      startTime = SystemClock.uptimeMillis();
+      input = ByteBuffer.wrap(binary);
+      output = ByteBuffer.allocateDirect(input.limit());
+      output.order(ByteOrder.nativeOrder());
 
-    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != 0) { result.error("Unexpected output position", null, null); return; }
+    }
 
-    PriorityQueue<Map<String, Object>> pq =
-        new PriorityQueue<>(
-            1,
-            new Comparator<Map<String, Object>>() {
-              @Override
-              public int compare(Map<String, Object> lhs, Map<String, Object> rhs) {
-                return Float.compare((float)rhs.get("confidenceInClass"), (float)lhs.get("confidenceInClass"));
-              }
-            });
+    protected void runTflite() { tfLite.run(input, output); }
 
-    for (int y = 0; y < gridSize; ++y) {
-      for (int x = 0; x < gridSize; ++x) {
-        for (int b = 0; b < numBoxesPerBlock; ++b) {
-          final int offset = (numClasses + 5) * b;
+    protected void onRunTfliteDone() {
+      Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
+      if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
 
-          final float confidence = expit(output[0][y][x][offset + 4]);
+      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
+      Map<String, Object> res = new HashMap<>();
+      res.put("binary", output.array());
+      ret.add(res);
+      result.success(ret);
+    }
+  }
 
-          final float[] classes = new float[numClasses];
-          for (int c = 0; c < numClasses; ++c) {
-            classes[c] = output[0][y][x][offset + 5 + c];
+  private class RunPix2PixOnFrame extends TfliteTask {
+    long startTime;
+    float IMAGE_MEAN, IMAGE_STD;
+    ByteBuffer input, output;
+
+    RunPix2PixOnFrame(HashMap args, Result result) throws IOException {
+      super(args, result);
+      List<byte[]> bytesList= (ArrayList)args.get("bytesList");
+      double mean = (double)(args.get("imageMean"));
+      IMAGE_MEAN = (float)mean;
+      double std = (double)(args.get("imageStd"));
+      IMAGE_STD = (float)std;
+      int imageHeight = (int)(args.get("imageHeight"));
+      int imageWidth = (int)(args.get("imageWidth"));
+      int rotation = (int)(args.get("rotation"));
+
+      startTime = SystemClock.uptimeMillis();
+      input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
+      output = ByteBuffer.allocateDirect(input.limit());
+      output.order(ByteOrder.nativeOrder());
+
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != 0) { result.error("Unexpected output position", null, null); return; }
+    }
+
+    protected void runTflite() { tfLite.run(input, output); }
+
+    protected void onRunTfliteDone() {
+      Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
+      if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
+
+      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
+      Map<String, Object> res = new HashMap<>();
+      res.put("binary", output.array());
+      ret.add(res);
+      result.success(ret);
+    }
+  }
+
+  private class RunSSDMobileNet extends TfliteTask {
+    int num;
+    int numResultsPerClass;
+    float threshold;
+    float[][][] outputLocations;
+    float[][] outputClasses;
+    float[][] outputScores;
+    float[] numDetections = new float[1];
+    Object[] inputArray;
+    Map<Integer, Object> outputMap = new HashMap<>();
+    long startTime;
+
+    RunSSDMobileNet(HashMap args, ByteBuffer imgData, int numResultsPerClass, float threshold, Result result) {
+      super(args, result);
+      this.num = tfLite.getOutputTensor(0).shape()[1];
+      this.numResultsPerClass = numResultsPerClass;
+      this.threshold = threshold;
+      this.outputLocations = new float[1][num][4];
+      this.outputClasses = new float[1][num];
+      this.outputScores = new float[1][num];
+      this.inputArray = new Object[] {imgData};
+
+      outputMap.put(0, outputLocations);
+      outputMap.put(1, outputClasses);
+      outputMap.put(2, outputScores);
+      outputMap.put(3, numDetections);
+
+      startTime = SystemClock.uptimeMillis();
+    }
+
+    protected void runTflite() { tfLite.runForMultipleInputsOutputs(inputArray, outputMap); }
+
+    protected void onRunTfliteDone() {
+      Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+
+      Map<String, Integer> counters = new HashMap<>();
+      final List<Map<String, Object>> results = new ArrayList<>();
+
+      for (int i = 0; i < numDetections[0]; ++i) {
+        if (outputScores[0][i] < threshold) continue;
+
+        String detectedClass = labels.get((int) outputClasses[0][i] + 1);
+
+        if (counters.get(detectedClass) == null) {
+          counters.put(detectedClass, 1);
+        } else {
+          int count = counters.get(detectedClass);
+          if (count >= numResultsPerClass) {
+            continue;
+          } else {
+            counters.put(detectedClass, count + 1);
           }
-          softmax(classes);
+        }
 
-          int detectedClass = -1;
-          float maxClass = 0;
-          for (int c = 0; c < numClasses; ++c) {
-            if (classes[c] > maxClass) {
-              detectedClass = c;
-              maxClass = classes[c];
+        Map<String, Object> rect = new HashMap<>();
+        float ymin = Math.max(0, outputLocations[0][i][0]);
+        float xmin = Math.max(0, outputLocations[0][i][1]);
+        float ymax = outputLocations[0][i][2];
+        float xmax = outputLocations[0][i][3];
+        rect.put("x", xmin);
+        rect.put("y", ymin);
+        rect.put("w", Math.min(1 - xmin, xmax - xmin));
+        rect.put("h", Math.min(1 - ymin, ymax - ymin));
+
+        Map<String, Object> ret = new HashMap<>();
+        ret.put("rect", rect);
+        ret.put("confidenceInClass", outputScores[0][i]);
+        ret.put("detectedClass", detectedClass);
+
+        results.add(ret);
+      }
+
+      result.success(results);
+    }
+  }
+
+  private class RunYOLO extends TfliteTask {
+    ByteBuffer imgData;
+    int blockSize;
+    int numBoxesPerBlock;
+    List<Double> anchors;
+    float threshold;
+    int numResultsPerClass;
+    long startTime;
+    int gridSize;
+    int numClasses;
+    final float[][][][] output;
+
+    RunYOLO(HashMap args,
+            ByteBuffer imgData,
+            int blockSize,
+            int numBoxesPerBlock,
+            List<Double> anchors,
+            float threshold,
+            int numResultsPerClass,
+            Result result)
+    {
+      super(args, result);
+      this.imgData = imgData;
+      this.blockSize = blockSize;
+      this.numBoxesPerBlock = numBoxesPerBlock;
+      this.anchors = anchors;
+      this.threshold = threshold;
+      this.numResultsPerClass = numResultsPerClass;
+      this.startTime = SystemClock.uptimeMillis();
+
+      Tensor tensor = tfLite.getInputTensor(0);
+      inputSize = tensor.shape()[1];
+
+      this.gridSize = inputSize / blockSize;
+      this.numClasses = labels.size();
+      this.output = new float[1][gridSize][gridSize][(numClasses + 5) * numBoxesPerBlock];
+    }
+
+    protected void runTflite() { tfLite.run(imgData, output); }
+
+    protected void onRunTfliteDone() {
+      Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+
+      PriorityQueue<Map<String, Object>> pq =
+          new PriorityQueue<>(
+              1,
+              new Comparator<Map<String, Object>>() {
+                @Override
+                public int compare(Map<String, Object> lhs, Map<String, Object> rhs) {
+                  return Float.compare((float)rhs.get("confidenceInClass"), (float)lhs.get("confidenceInClass"));
+                }
+              });
+
+      for (int y = 0; y < gridSize; ++y) {
+        for (int x = 0; x < gridSize; ++x) {
+          for (int b = 0; b < numBoxesPerBlock; ++b) {
+            final int offset = (numClasses + 5) * b;
+
+            final float confidence = expit(output[0][y][x][offset + 4]);
+
+            final float[] classes = new float[numClasses];
+            for (int c = 0; c < numClasses; ++c) {
+              classes[c] = output[0][y][x][offset + 5 + c];
+            }
+            softmax(classes);
+
+            int detectedClass = -1;
+            float maxClass = 0;
+            for (int c = 0; c < numClasses; ++c) {
+              if (classes[c] > maxClass) {
+                detectedClass = c;
+                maxClass = classes[c];
+              }
+            }
+
+            final float confidenceInClass = maxClass * confidence;
+            if (confidenceInClass > threshold) {
+              final float xPos = (x + expit(output[0][y][x][offset + 0])) * blockSize;
+              final float yPos = (y + expit(output[0][y][x][offset + 1])) * blockSize;
+
+              final float w = (float) (Math.exp(output[0][y][x][offset + 2]) * anchors.get(2 * b + 0)) * blockSize;
+              final float h = (float) (Math.exp(output[0][y][x][offset + 3]) * anchors.get(2 * b + 1)) * blockSize;
+
+              final float xmin = Math.max(0, (xPos - w / 2) / inputSize);
+              final float ymin = Math.max(0, (yPos - h / 2) / inputSize);
+
+              Map<String, Object> rect = new HashMap<>();
+              rect.put("x", xmin);
+              rect.put("y", ymin);
+              rect.put("w", Math.min(1 - xmin, w / inputSize));
+              rect.put("h", Math.min(1 - ymin, h / inputSize));
+
+              Map<String, Object> ret = new HashMap<>();
+              ret.put("rect", rect);
+              ret.put("confidenceInClass", confidenceInClass);
+              ret.put("detectedClass", labels.get(detectedClass));
+
+              pq.add(ret);
             }
           }
+        }
+      }
 
-          final float confidenceInClass = maxClass * confidence;
-          if (confidenceInClass > threshold) {
-            final float xPos = (x + expit(output[0][y][x][offset + 0])) * blockSize;
-            final float yPos = (y + expit(output[0][y][x][offset + 1])) * blockSize;
+      Map<String, Integer> counters = new HashMap<>();
+      List<Map<String, Object>> results = new ArrayList<>();
 
-            final float w = (float) (Math.exp(output[0][y][x][offset + 2]) * anchors.get(2 * b + 0)) * blockSize;
-            final float h = (float) (Math.exp(output[0][y][x][offset + 3]) * anchors.get(2 * b + 1)) * blockSize;
+      for (int i = 0; i < pq.size(); ++i) {
+        Map<String, Object> ret = pq.poll();
+        String detectedClass = ret.get("detectedClass").toString();
 
-            final float xmin = Math.max(0, (xPos - w / 2) / inputSize);
-            final float ymin = Math.max(0, (yPos - h / 2) / inputSize);
-
-            Map<String, Object> rect = new HashMap<>();
-            rect.put("x", xmin);
-            rect.put("y", ymin);
-            rect.put("w", Math.min(1 - xmin, w / inputSize));
-            rect.put("h", Math.min(1 - ymin, h / inputSize));
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("rect", rect);
-            result.put("confidenceInClass", confidenceInClass);
-            result.put("detectedClass", labels.get(detectedClass));
-
-            pq.add(result);
+        if (counters.get(detectedClass) == null) {
+          counters.put(detectedClass, 1);
+        } else {
+          int count = counters.get(detectedClass);
+          if (count >= numResultsPerClass) {
+            continue;
+          } else {
+            counters.put(detectedClass, count + 1);
           }
         }
+        results.add(ret);
       }
+      result.success(results);
     }
-
-    Map<String, Integer> counters = new HashMap<>();
-    List<Map<String, Object>> results = new ArrayList<>();
-
-    for (int i = 0; i < pq.size(); ++i) {
-      Map<String, Object> result = pq.poll();
-      String detectedClass = result.get("detectedClass").toString();
-
-      if (counters.get(detectedClass) == null) {
-        counters.put(detectedClass, 1);
-      } else {
-        int count = counters.get(detectedClass);
-        if (count >= numResultsPerClass) {
-          continue;
-        } else {
-          counters.put(detectedClass, count + 1);
-        }
-      }
-      results.add(result);
-    }
-    return results;
   }
 
   private float expit(final float x) {
