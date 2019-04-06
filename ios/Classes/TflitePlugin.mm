@@ -19,7 +19,7 @@
 
 typedef void (^TfLiteStatusCallback)(TfLiteStatus);
 NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* args);
-void runTfliteAsync(TfLiteStatusCallback cb);
+void runTflite(NSDictionary* args, TfLiteStatusCallback cb);
 void runModelOnImage(NSDictionary* args, FlutterResult result);
 void runModelOnBinary(NSDictionary* args, FlutterResult result);
 void runModelOnFrame(NSDictionary* args, FlutterResult result);
@@ -135,15 +135,21 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   return @"success";
 }
 
-void runTfliteAsync(TfLiteStatusCallback cb) {
-  interpreter_busy = true;
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
-    TfLiteStatus status = interpreter->Invoke();
-    dispatch_async(dispatch_get_main_queue(), ^(void){
-      interpreter_busy = false;
-      cb(status);
+void runTflite(NSDictionary* args, TfLiteStatusCallback cb) {
+  const bool asynch = [args[@"asynch"] boolValue];
+  if (asynch) {
+    interpreter_busy = true;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
+      TfLiteStatus status = interpreter->Invoke();
+      dispatch_async(dispatch_get_main_queue(), ^(void){
+        interpreter_busy = false;
+        cb(status);
+      });
     });
-  });
+  } else {
+    TfLiteStatus status = interpreter->Invoke();
+    cb(status);
+  }
 }
 
 NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, bool convertToUint8,
@@ -334,7 +340,7 @@ void runModelOnImage(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -364,7 +370,7 @@ void runModelOnBinary(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -399,7 +405,7 @@ void runModelOnFrame(NSDictionary* args, FlutterResult result) {
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -594,7 +600,7 @@ void detectObjectOnImage(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -628,7 +634,7 @@ void detectObjectOnBinary(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -667,7 +673,7 @@ void detectObjectOnFrame(NSDictionary* args, FlutterResult result) {
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
   
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -696,7 +702,7 @@ void runPix2PixOnImage(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorImage(image_path, input_mean, input_std, &input_size);
 
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -733,7 +739,7 @@ void runPix2PixOnBinary(NSDictionary* args, FlutterResult result) {
   int input_size;
   feedInputTensorBinary(typedData, &input_size);
 
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
@@ -770,7 +776,7 @@ void runPix2PixOnFrame(NSDictionary* args, FlutterResult result) {
   int image_channels = 4;
   feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
 
-  runTfliteAsync(^(TfLiteStatus status) {
+  runTflite(args, ^(TfLiteStatus status) {
     if (status != kTfLiteOk) {
       NSLog(@"Failed to invoke!");
       return result(empty);
