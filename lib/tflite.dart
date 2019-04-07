@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show Color;
 import 'package:meta/meta.dart';
 import 'package:flutter/services.dart';
 
@@ -213,4 +214,46 @@ class Tflite {
       },
     );
   }
+
+  // https://github.com/meetshah1995/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py
+  static List<int> pascalVOCLabelColors = [
+    Color.fromARGB(255,   0,   0,   0).value, // background
+    Color.fromARGB(255, 128,   0,   0).value, // aeroplane
+    Color.fromARGB(255,   0, 128,   0).value, // biyclce
+    Color.fromARGB(255, 128, 128,   0).value, // bird
+    Color.fromARGB(255,   0,   0, 128).value, // boat
+    Color.fromARGB(255, 128,   0, 128).value, // bottle
+    Color.fromARGB(255,   0, 128, 128).value, // bus
+    Color.fromARGB(255, 128, 128, 128).value, // car
+    Color.fromARGB(255,  64,   0,   0).value, // cat
+    Color.fromARGB(255, 192,   0,   0).value, // chair
+    Color.fromARGB(255,  64, 128,   0).value, // cow
+    Color.fromARGB(255, 192, 128,   0).value, // diningtable
+    Color.fromARGB(255,  64,   0, 128).value, // dog
+    Color.fromARGB(255, 192,   0, 128).value, // horse
+    Color.fromARGB(255, 64,  128, 128).value, // motorbike
+    Color.fromARGB(255, 192, 128, 128).value, // person
+    Color.fromARGB(255,   0,  64,   0).value, // potted plant
+    Color.fromARGB(255, 128,  64,   0).value, // sheep
+    Color.fromARGB(255,   0, 192,   0).value, // sofa
+    Color.fromARGB(255, 128, 192,   0).value, // train
+    Color.fromARGB(255,   0,  64, 128).value, // tv-monitor
+  ];
+
+  static Future<Uint8List> runSegmentationOnImage(
+      {@required String path,
+        double imageMean = 0,
+        double imageStd = 255.0}) async {
+    return await _channel.invokeMethod(
+      'runSegmentationOnImage',
+      {
+        "path": path,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+        "labelColors": pascalVOCLabelColors,
+      },
+    );
+  }
 }
+
+

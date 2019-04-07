@@ -13,6 +13,7 @@ void main() => runApp(new App());
 const String mobile = "MobileNet";
 const String ssd = "SSD MobileNet";
 const String yolo = "Tiny YOLOv2";
+const String deeplab = "DeepLab";
 
 class App extends StatelessWidget {
   @override
@@ -31,12 +32,18 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   File _image;
   List _recognitions;
-  String _model = "";
+  String _model = mobile;
   double _imageHeight;
   double _imageWidth;
 
-  Future getImage() async {
+  Future predictImagePicker() async {
     var image = await ImagePicker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    predictImage(image);
+  }
+
+  Future predictImage(File image) async {
+    if (image == null) return;
 
     switch (_model) {
       case yolo:
@@ -44,6 +51,9 @@ class _MyAppState extends State<MyApp> {
         break;
       case ssd:
         ssdMobileNet(image);
+        break;
+      case deeplab:
+        segmentMobileNet(image);
         break;
       default:
         recognizeImage(image);
@@ -67,6 +77,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    loadModel();
   }
 
   Future loadModel() async {
@@ -83,6 +94,11 @@ class _MyAppState extends State<MyApp> {
           res = await Tflite.loadModel(
               model: "assets/ssd_mobilenet.tflite",
               labels: "assets/ssd_mobilenet.txt");
+          break;
+        case deeplab:
+          res = await Tflite.loadModel(
+              model: "assets/deeplabv3_257_mv_gpu.tflite",
+              labels: "assets/deeplabv3_257_mv_gpu.txt");
           break;
         default:
           res = await Tflite.loadModel(
@@ -194,11 +210,25 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  onSelect(model) {
+  Future segmentMobileNet(File image) async {
+    var recognitions = await Tflite.runSegmentationOnImage(
+      path: image.path,
+      imageMean: 127.5,
+      imageStd: 127.5,
+    );
+
+    setState(() {
+      _recognitions = recognitions;
+    });
+  }
+
+  onSelect(model) async {
     setState(() {
       _model = model;
+      _recognitions = null;
     });
-    loadModel();
+    await loadModel();
+    predictImage(_image);
   }
 
   List<Widget> renderBoxes(Size screen) {
@@ -214,6 +244,7 @@ class _MyAppState extends State<MyApp> {
         height: re["rect"]["h"] * factorY,
         child: Container(
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.all(Radius.circular(8.0)),
             border: Border.all(
               color: blue,
               width: 2,
@@ -235,58 +266,91 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
+    List<Widget> stackChildren = [];
+
+    if (_model == deeplab && _recognitions != null) {
+      stackChildren.add(Positioned(
+        top: 0.0,
+        left: 0.0,
+        width: size.width,
+        child: _image == null
+            ? Text('No image selected.')
+            : Container(
+                decoration: BoxDecoration(
+                    image: DecorationImage(
+                        alignment: Alignment.topCenter,
+                        image: MemoryImage(_recognitions),
+                        fit: BoxFit.fill)),
+                child: Opacity(opacity: 0.3, child: Image.file(_image))),
+      ));
+    } else {
+      stackChildren.add(Positioned(
+        top: 0.0,
+        left: 0.0,
+        width: size.width,
+        child: _image == null ? Text('No image selected.') : Image.file(_image),
+      ));
+    }
+
+    if (_model == mobile) {
+      stackChildren.add(Center(
+        child: Column(
+          children: _recognitions != null
+              ? _recognitions.map((res) {
+                  return Text(
+                    "${res["index"]} - ${res["label"]}: ${res["confidence"].toStringAsFixed(3)}",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 20.0,
+                      background: Paint()..color = Colors.white,
+                    ),
+                  );
+                }).toList()
+              : [],
+        ),
+      ));
+    } else if (_model == ssd || _model == yolo) {
+      stackChildren.addAll(renderBoxes(size));
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('tflite example app'),
-      ),
-      body: _model == ""
-          ? Center(
-              child: Column(
-                children: <Widget>[
-                  RaisedButton(
-                    child: const Text(mobile),
-                    onPressed: () => onSelect(mobile),
-                  ),
-                  RaisedButton(
-                    child: const Text(ssd),
-                    onPressed: () => onSelect(ssd),
-                  ),
-                  RaisedButton(
-                    child: const Text(yolo),
-                    onPressed: () => onSelect(yolo),
-                  ),
-                ],
-              ),
-            )
-          : Stack(
-              children: <Widget>[
-                Container(
-                  child: _image == null
-                      ? Text('No image selected.')
-                      : Image.file(_image),
+        actions: <Widget>[
+          PopupMenuButton<String>(
+            onSelected: onSelect,
+            itemBuilder: (context) {
+              List<PopupMenuEntry<String>> menuEntries = [
+                const PopupMenuItem<String>(
+                  child: Text(mobile),
+                  value: mobile,
                 ),
-                _model == mobile
-                    ? Center(
-                        child: Column(
-                          children: _recognitions != null
-                              ? _recognitions.map((res) {
-                                  return Text(
-                                    "${res["index"]} - ${res["label"]}: ${res["confidence"].toString()}",
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 20.0,
-                                      background: Paint()..color = Colors.white,
-                                    ),
-                                  );
-                                }).toList()
-                              : [],
-                        ),
-                      )
-                    : Stack(children: renderBoxes(size)),
-              ],
-            ),
+                const PopupMenuItem<String>(
+                  child: Text(ssd),
+                  value: ssd,
+                ),
+                const PopupMenuItem<String>(
+                  child: Text(yolo),
+                  value: yolo,
+                ),
+              ];
+
+              if (Platform.isAndroid) {
+                menuEntries.add(const PopupMenuItem<String>(
+                  child: Text(deeplab),
+                  value: deeplab,
+                ));
+              }
+              return menuEntries;
+            },
+          )
+        ],
+      ),
+      body: Stack(
+        children: stackChildren,
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: getImage,
+        onPressed: predictImagePicker,
         tooltip: 'Pick Image',
         child: Icon(Icons.image),
       ),
