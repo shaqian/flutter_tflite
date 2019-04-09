@@ -642,22 +642,26 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private class RunSSDMobileNet extends TfliteTask {
-    Object[] inputArray;
-    float threshold;
+    int num;
     int numResultsPerClass;
-    int NUM_DETECTIONS = 10;
-    float[][][] outputLocations = new float[1][NUM_DETECTIONS][4];
-    float[][] outputClasses = new float[1][NUM_DETECTIONS];
-    float[][] outputScores = new float[1][NUM_DETECTIONS];
+    float threshold;
+    float[][][] outputLocations;
+    float[][] outputClasses;
+    float[][] outputScores;
     float[] numDetections = new float[1];
+    Object[] inputArray;
     Map<Integer, Object> outputMap = new HashMap<>();
     long startTime;
 
     RunSSDMobileNet(HashMap args, ByteBuffer imgData, int numResultsPerClass, float threshold, Result result) {
       super(args, result);
-      this.inputArray = new Object[] {imgData};
-      this.threshold = threshold;
+      this.num = tfLite.getOutputTensor(0).shape()[1];
       this.numResultsPerClass = numResultsPerClass;
+      this.threshold = threshold;
+      this.outputLocations = new float[1][num][4];
+      this.outputClasses = new float[1][num];
+      this.outputScores = new float[1][num];
+      this.inputArray = new Object[] {imgData};
 
       outputMap.put(0, outputLocations);
       outputMap.put(1, outputClasses);
@@ -673,9 +677,9 @@ public class TflitePlugin implements MethodCallHandler {
       Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
 
       Map<String, Integer> counters = new HashMap<>();
-      final List<Map<String, Object>> results = new ArrayList<>(NUM_DETECTIONS);
+      final List<Map<String, Object>> results = new ArrayList<>();
 
-      for (int i = 0; i < NUM_DETECTIONS; ++i) {
+      for (int i = 0; i < numDetections[0]; ++i) {
         if (outputScores[0][i] < threshold) continue;
 
         String detectedClass = labels.get((int) outputClasses[0][i] + 1);
