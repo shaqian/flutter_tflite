@@ -333,14 +333,11 @@ class _MyAppState extends State<MyApp> {
                   child: Text(yolo),
                   value: yolo,
                 ),
-              ];
-
-              if (Platform.isAndroid) {
-                menuEntries.add(const PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   child: Text(deeplab),
                   value: deeplab,
-                ));
-              }
+                )
+              ];
               return menuEntries;
             },
           )

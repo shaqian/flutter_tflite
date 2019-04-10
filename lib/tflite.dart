@@ -187,21 +187,21 @@ class Tflite {
     );
   }
 
-  static Future<List> runPix2PixOnBinary(
-      {@required Uint8List binary}) async {
+  static Future<List> runPix2PixOnBinary({@required Uint8List binary}) async {
     return await _channel.invokeMethod(
-      'runPix2PixOnBinary', {"binary": binary},
+      'runPix2PixOnBinary',
+      {"binary": binary},
     );
   }
 
-  static Future<List> runPix2PixOnFrame(
-      {@required List<Uint8List> bytesList,
-      int imageHeight = 1280,
-      int imageWidth = 720,
-      double imageMean = 0,
-      double imageStd = 255.0,
-      int rotation: 90, // Android only
-      }) async {
+  static Future<List> runPix2PixOnFrame({
+    @required List<Uint8List> bytesList,
+    int imageHeight = 1280,
+    int imageWidth = 720,
+    double imageMean = 0,
+    double imageStd = 255.0,
+    int rotation: 90, // Android only
+  }) async {
     return await _channel.invokeMethod(
       'runPix2PixOnFrame',
       {
@@ -217,43 +217,82 @@ class Tflite {
 
   // https://github.com/meetshah1995/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py
   static List<int> pascalVOCLabelColors = [
-    Color.fromARGB(255,   0,   0,   0).value, // background
-    Color.fromARGB(255, 128,   0,   0).value, // aeroplane
-    Color.fromARGB(255,   0, 128,   0).value, // biyclce
-    Color.fromARGB(255, 128, 128,   0).value, // bird
-    Color.fromARGB(255,   0,   0, 128).value, // boat
-    Color.fromARGB(255, 128,   0, 128).value, // bottle
-    Color.fromARGB(255,   0, 128, 128).value, // bus
+    Color.fromARGB(255, 0, 0, 0).value, // background
+    Color.fromARGB(255, 128, 0, 0).value, // aeroplane
+    Color.fromARGB(255, 0, 128, 0).value, // biyclce
+    Color.fromARGB(255, 128, 128, 0).value, // bird
+    Color.fromARGB(255, 0, 0, 128).value, // boat
+    Color.fromARGB(255, 128, 0, 128).value, // bottle
+    Color.fromARGB(255, 0, 128, 128).value, // bus
     Color.fromARGB(255, 128, 128, 128).value, // car
-    Color.fromARGB(255,  64,   0,   0).value, // cat
-    Color.fromARGB(255, 192,   0,   0).value, // chair
-    Color.fromARGB(255,  64, 128,   0).value, // cow
-    Color.fromARGB(255, 192, 128,   0).value, // diningtable
-    Color.fromARGB(255,  64,   0, 128).value, // dog
-    Color.fromARGB(255, 192,   0, 128).value, // horse
-    Color.fromARGB(255, 64,  128, 128).value, // motorbike
+    Color.fromARGB(255, 64, 0, 0).value, // cat
+    Color.fromARGB(255, 192, 0, 0).value, // chair
+    Color.fromARGB(255, 64, 128, 0).value, // cow
+    Color.fromARGB(255, 192, 128, 0).value, // diningtable
+    Color.fromARGB(255, 64, 0, 128).value, // dog
+    Color.fromARGB(255, 192, 0, 128).value, // horse
+    Color.fromARGB(255, 64, 128, 128).value, // motorbike
     Color.fromARGB(255, 192, 128, 128).value, // person
-    Color.fromARGB(255,   0,  64,   0).value, // potted plant
-    Color.fromARGB(255, 128,  64,   0).value, // sheep
-    Color.fromARGB(255,   0, 192,   0).value, // sofa
-    Color.fromARGB(255, 128, 192,   0).value, // train
-    Color.fromARGB(255,   0,  64, 128).value, // tv-monitor
+    Color.fromARGB(255, 0, 64, 0).value, // potted plant
+    Color.fromARGB(255, 128, 64, 0).value, // sheep
+    Color.fromARGB(255, 0, 192, 0).value, // sofa
+    Color.fromARGB(255, 128, 192, 0).value, // train
+    Color.fromARGB(255, 0, 64, 128).value, // tv-monitor
   ];
 
   static Future<Uint8List> runSegmentationOnImage(
       {@required String path,
-        double imageMean = 0,
-        double imageStd = 255.0}) async {
+      double imageMean = 0,
+      double imageStd = 255.0,
+      List<int> labelColors,
+      String outputType = "png"}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnImage',
       {
         "path": path,
         "imageMean": imageMean,
         "imageStd": imageStd,
-        "labelColors": pascalVOCLabelColors,
+        "labelColors": labelColors ?? pascalVOCLabelColors,
+        "outputType": outputType,
+      },
+    );
+  }
+
+  static Future<Uint8List> runSegmentationOnBinary(
+      {@required Uint8List binary,
+      List<int> labelColors,
+      String outputType = "png"}) async {
+    return await _channel.invokeMethod(
+      'runSegmentationOnImage',
+      {
+        "binary": binary,
+        "labelColors": labelColors ?? pascalVOCLabelColors,
+        "outputType": outputType,
+      },
+    );
+  }
+
+  static Future<Uint8List> runSegmentationOnFrame(
+      {@required List<Uint8List> bytesList,
+      int imageHeight = 1280,
+      int imageWidth = 720,
+      double imageMean = 0,
+      double imageStd = 255.0,
+      int rotation: 90, // Android only
+      List<int> labelColors,
+      String outputType = "png"}) async {
+    return await _channel.invokeMethod(
+      'runSegmentationOnImage',
+      {
+        "bytesList": bytesList,
+        "imageHeight": imageHeight,
+        "imageWidth": imageWidth,
+        "imageMean": imageMean,
+        "imageStd": imageStd,
+        "rotation": rotation,
+        "labelColors": labelColors ?? pascalVOCLabelColors,
+        "outputType": outputType,
       },
     );
   }
 }
-
-

@@ -1,3 +1,5 @@
+// #define CONTRIB_PATH
+
 #import "TflitePlugin.h"
 
 #include <pthread.h>
@@ -8,10 +10,17 @@
 #include <sstream>
 #include <string>
 
+#ifdef CONTRIB_PATH
+#include "tensorflow/contrib/lite/kernels/register.h"
+#include "tensorflow/contrib/lite/model.h"
+#include "tensorflow/contrib/lite/string_util.h"
+#include "tensorflow/contrib/lite/op_resolver.h"
+#else
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/string_util.h"
 #include "tensorflow/lite/op_resolver.h"
+#endif
 
 #include "ios_image_load.h"
 
@@ -27,6 +36,9 @@ NSMutableArray* detectObjectOnFrame(NSDictionary* args);
 NSMutableArray* runPix2PixOnImage(NSDictionary* args);
 NSMutableArray* runPix2PixOnBinary(NSDictionary* args);
 NSMutableArray* runPix2PixOnFrame(NSDictionary* args);
+FlutterStandardTypedData* runSegmentationOnImage(NSDictionary* args);
+FlutterStandardTypedData* runSegmentationOnBinary(NSDictionary* args);
+FlutterStandardTypedData* runSegmentationOnFrame(NSDictionary* args);
 void close();
 
 @implementation TflitePlugin {
@@ -79,6 +91,15 @@ void close();
     result(generated_result);
   } else if ([@"runPix2PixOnFrame" isEqualToString:call.method]) {
     NSMutableArray* generated_result = runPix2PixOnFrame(call.arguments);
+    result(generated_result);
+  } else if ([@"runSegmentationOnImage" isEqualToString:call.method]) {
+    FlutterStandardTypedData* generated_result = runSegmentationOnImage(call.arguments);
+    result(generated_result);
+  } else if ([@"runSegmentationOnBinary" isEqualToString:call.method]) {
+    FlutterStandardTypedData* generated_result = runSegmentationOnBinary(call.arguments);
+    result(generated_result);
+  } else if ([@"runSegmentationOnFrame" isEqualToString:call.method]) {
+    FlutterStandardTypedData* generated_result = runSegmentationOnFrame(call.arguments);
     result(generated_result);
   } else if ([@"close" isEqualToString:call.method]) {
     close();
@@ -766,6 +787,159 @@ NSMutableArray* runPix2PixOnFrame(NSDictionary* args) {
   [res setObject:ret forKey:@"binary"];
   [results addObject:res];
   return results;
+}
+
+void setPixel(char* rgba, int index, long color) {
+  rgba[index * 4] = (color >> 16) & 0xFF;
+  rgba[index * 4 + 1] = (color >> 8) & 0xFF;
+  rgba[index * 4 + 2] = color & 0xFF;
+  rgba[index * 4 + 3] = (color >> 24) & 0xFF;
+}
+
+NSData* fetchArgmax(const NSArray* labelColors, const NSString* outputType) {
+  int output = interpreter->outputs()[0];
+  TfLiteTensor* output_tensor = interpreter->tensor(output);
+  const int height = output_tensor->dims->data[1];
+  const int width = output_tensor->dims->data[2];
+  const int channels = output_tensor->dims->data[3];
+  
+  NSMutableData *data = nil;
+  int size = height * width * 4;
+  data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
+  char* out = (char*)[data bytes];
+  if (output_tensor->type == kTfLiteUInt8) {
+    const uint8_t* bytes = interpreter->typed_tensor<uint8_t>(output);
+    for (int i = 0; i < height; ++i) {
+      for (int j = 0; j < width; ++j) {
+        int index = i * width + j;
+        int maxIndex = 0;
+        int maxValue = 0;
+        for (int c = 0; c < channels; ++c) {
+          int outputValue = bytes[index* channels + c];
+          if (outputValue > maxValue) {
+            maxIndex = c;
+            maxValue = outputValue;
+          }
+        }
+        long labelColor = [[labelColors objectAtIndex:maxIndex] longValue];
+        setPixel(out, index, labelColor);
+      }
+    }
+  } else { // kTfLiteFloat32
+    const float* bytes = interpreter->typed_tensor<float>(output);
+    for (int i = 0; i < height; ++i) {
+      for (int j = 0; j < width; ++j) {
+        int index = i * width + j;
+        int maxIndex = 0;
+        float maxValue = .0f;
+        for (int c = 0; c < channels; ++c) {
+          float outputValue = bytes[index * channels + c];
+          if (outputValue > maxValue) {
+            maxIndex = c;
+            maxValue = outputValue;
+          }
+        }
+        long labelColor = [[labelColors objectAtIndex:maxIndex] longValue];
+        setPixel(out, index, labelColor);
+      }
+    }
+  }
+  
+  if ([outputType isEqual: @"png"]) {
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef bitmapContext = CGBitmapContextCreate(out,
+                                                       width,
+                                                       height,
+                                                       8, // bitsPerComponent
+                                                       4 * width, // bytesPerRow
+                                                       colorSpace,
+                                                       kCGImageAlphaNoneSkipLast);
+    
+    CFRelease(colorSpace);
+    CGImageRef cgImage = CGBitmapContextCreateImage(bitmapContext);
+    NSData* image = UIImagePNGRepresentation([[UIImage alloc] initWithCGImage:cgImage]);
+    CFRelease(cgImage);
+    CFRelease(bitmapContext);
+    return image;
+  } else {
+    return data;
+  }
+}
+
+FlutterStandardTypedData* runSegmentationOnImage(NSDictionary* args) {
+  const NSString* image_path = args[@"path"];
+  const float input_mean = [args[@"imageMean"] floatValue];
+  const float input_std = [args[@"imageStd"] floatValue];
+  const NSArray* labelColors = args[@"labelColors"];
+  const NSString* outputType = args[@"outputType"];
+  
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return nil;
+  }
+  
+  int input_size;
+  feedInputTensorImage(image_path, input_mean, input_std, &input_size);
+  
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return nil;
+  }
+  
+  NSData* output = fetchArgmax(labelColors, outputType);
+  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
+  return result;
+}
+
+FlutterStandardTypedData* runSegmentationOnBinary(NSDictionary* args) {
+  const FlutterStandardTypedData* typedData = args[@"binary"];
+  const NSArray* labelColors = args[@"labelColors"];
+  const NSString* outputType = args[@"outputType"];
+  
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return nil;
+  }
+  
+  int input_size;
+  feedInputTensorBinary(typedData, &input_size);
+  
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return nil;
+  }
+  
+  NSData* output = fetchArgmax(labelColors, outputType);
+  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
+  return result;
+}
+
+FlutterStandardTypedData* runSegmentationOnFrame(NSDictionary* args) {
+  const FlutterStandardTypedData* typedData = args[@"bytesList"][0];
+  const int image_height = [args[@"imageHeight"] intValue];
+  const int image_width = [args[@"imageWidth"] intValue];
+  const float input_mean = [args[@"imageMean"] floatValue];
+  const float input_std = [args[@"imageStd"] floatValue];
+  const NSArray* labelColors = args[@"labelColors"];
+  const NSString* outputType = args[@"outputType"];
+  
+  if (!interpreter) {
+    NSLog(@"Failed to construct interpreter.");
+    return nil;
+  }
+  
+  int input_size;
+  int image_channels = 4;
+  feedInputTensorFrame(typedData, &input_size, image_height, image_width, image_channels, input_mean, input_std);
+  
+  if (interpreter->Invoke() != kTfLiteOk) {
+    NSLog(@"Failed to invoke!");
+    return nil;
+  }
+  
+  NSData* output = fetchArgmax(labelColors, outputType);
+  FlutterStandardTypedData* result = [FlutterStandardTypedData typedDataWithBytes: output];
+  return result;
 }
 
 void close() {

@@ -2,6 +2,20 @@
 
 A Flutter plugin for accessing TensorFlow Lite API. Supports Classification and Object Detection on both iOS and Android.
 
+### Table of Contents
+
+- [Installation](#Installation)
+- [Usage](#Usage)
+    - [Image Classification](#Image%20Classification)
+    - [Object Detection](#Object%20Detection)
+      - [SSD MobileNet](#SSD%20MobileNet)
+      - [YOLO](#Tiny%20YOLOv2)
+    - [Pix2Pix](#Pix2Pix)
+    - [Deeplab](#Deeplab)
+- [Example](#Example)
+    - [Prediction in Static Images](#Prediction%20in%20Static%20Images)
+    - [Real-time Detection](#Real-time%20Detection)
+
 ### Breaking changes since 1.0.0:
 
 1. Updated to TensorFlow Lite API v1.12.0.
@@ -258,7 +272,7 @@ var recognitions = await Tflite.detectObjectOnFrame(
 );
 ```
 
-### pix2pix
+### Pix2Pix
 
 > Thanks to [RP](https://github.com/shaqian/flutter_tflite/pull/18) from [Green Appers](https://github.com/GreenAppers)
 
@@ -297,7 +311,7 @@ Output:
 - Run on image stream (video frame):
 
 ```dart
-var result = await unPix2PixOnFrame(
+var result = await runPix2PixOnFrame(
   bytesList: img.planes.map((plane) {return plane.bytes;}).toList(),// required
   imageHeight: img.height, // defaults to 1280
   imageWidth: img.width,   // defaults to 720
@@ -314,12 +328,61 @@ Output:
 }
 ```
 
-## Demo
+### Deeplab
 
-- Classification and object detection
+> Thanks to [RP](https://github.com/shaqian/flutter_tflite/pull/22) from [see--](https://github.com/see--) for Android implementation.
+
+- Output:
+  
+  The output of Deeplab inference is Uint8List type. Depending on the `outputType` used, the output is:
+
+  - (if outputType is png) byte array of a png image 
+
+  - (otherwise) byte array of r, g, b, a values of the pixels 
+
+- Run on image:
+
+```dart
+var result = await runSegmentationOnImage(
+  path: filepath,     // required
+  imageMean: 0.0,     // defaults to 0.0
+  imageStd: 255.0,    // defaults to 255.0
+  labelColors: [...], // defaults to https://github.com/shaqian/flutter_tflite/blob/master/lib/tflite.dart#L219
+  outputType: "png"   // defaults to "png"
+);
+```
+
+- Run on binary:
+
+```dart
+var result = await runSegmentationOnBinary(
+  binary: binary,     // required;
+  labelColors: [...], // defaults to https://github.com/shaqian/flutter_tflite/blob/master/lib/tflite.dart#L219
+  outputType: "png"   // defaults to "png"
+);
+```
+
+- Run on image stream (video frame):
+
+```dart
+var result = await runSegmentationOnFrame(
+  bytesList: img.planes.map((plane) {return plane.bytes;}).toList(),// required
+  imageHeight: img.height, // defaults to 1280
+  imageWidth: img.width,   // defaults to 720
+  imageMean: 127.5,        // defaults to 0.0
+  imageStd: 127.5,         // defaults to 255.0
+  rotation: 90,            // defaults to 90, Android only
+  labelColors: [...],      // defaults to https://github.com/shaqian/flutter_tflite/blob/master/lib/tflite.dart#L219
+  outputType: "png"        // defaults to "png"
+);
+```
+
+## Example
+
+### Prediction in Static Images
 
   Refer to the [example](https://github.com/shaqian/flutter_tflite/tree/master/example).
 
-- Real-time detection
+### Real-time detection
 
-  Refer to [flutter_realtime_detection](https://github.com/shaqian/flutter_realtime_detection).
+  Refer to [flutter_realtime_Detection](https://github.com/shaqian/flutter_realtime_detection).

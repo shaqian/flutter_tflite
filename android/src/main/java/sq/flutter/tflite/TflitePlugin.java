@@ -154,6 +154,22 @@ public class TflitePlugin implements MethodCallHandler {
       catch (Exception e) {
         result.error("Failed to run model" , e.getMessage(), e);
       }
+    } else if (call.method.equals("runSegmentationOnBinary")) {
+      try {
+        byte[] res = runSegmentationOnBinary((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
+    } else if (call.method.equals("runSegmentationOnFrame")) {
+      try {
+        byte[] res = runSegmentationOnFrame((HashMap) call.arguments);
+        result.success(res);
+      }
+      catch (Exception e) {
+        result.error("Failed to run model" , e.getMessage(), e);
+      }
     } else {
       result.error("Invalid method", call.method.toString(), "");
     }
@@ -725,6 +741,7 @@ public class TflitePlugin implements MethodCallHandler {
     double std = (double)(args.get("imageStd"));
     float IMAGE_STD = (float)std;
     List<Long> labelColors = (ArrayList)args.get("labelColors");
+    String outputType = args.get("outputType").toString();
 
     long startTime = SystemClock.uptimeMillis();
     ByteBuffer input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
@@ -735,14 +752,57 @@ public class TflitePlugin implements MethodCallHandler {
 
     if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
     if (output.position() != output.limit()) throw new RuntimeException("Unexpected output position");
-
     output.flip();
-    Bitmap outputArgmax = fetchArgmax(output, labelColors);
-    return compressPNG(outputArgmax);
+
+    return fetchArgmax(output, labelColors, outputType);
   }
 
+  private byte[] runSegmentationOnBinary(HashMap args) throws IOException {
+    byte[] binary = (byte[])args.get("binary");
+    List<Long> labelColors = (ArrayList)args.get("labelColors");
+    String outputType = args.get("outputType").toString();
 
-  Bitmap fetchArgmax(ByteBuffer output, List<Long> labelColors) {
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = ByteBuffer.wrap(binary);
+    ByteBuffer output = ByteBuffer.allocateDirect(tfLite.getOutputTensor(0).numBytes());
+    output.order(ByteOrder.nativeOrder());
+    tfLite.run(input, output);
+    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != output.limit()) throw new RuntimeException("Unexpected output position");
+    output.flip();
+
+    return fetchArgmax(output, labelColors, outputType);
+  }
+
+  private byte[] runSegmentationOnFrame(HashMap args) throws IOException {
+    List<byte[]> bytesList= (ArrayList)args.get("bytesList");
+    double mean = (double)(args.get("imageMean"));
+    float IMAGE_MEAN = (float)mean;
+    double std = (double)(args.get("imageStd"));
+    float IMAGE_STD = (float)std;
+    int imageHeight = (int)(args.get("imageHeight"));
+    int imageWidth = (int)(args.get("imageWidth"));
+    int rotation = (int)(args.get("rotation"));
+    List<Long> labelColors = (ArrayList)args.get("labelColors");
+    String outputType = args.get("outputType").toString();
+
+    long startTime = SystemClock.uptimeMillis();
+    ByteBuffer input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
+    ByteBuffer output = ByteBuffer.allocateDirect(tfLite.getOutputTensor(0).numBytes());
+    output.order(ByteOrder.nativeOrder());
+    tfLite.run(input, output);
+    Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
+
+    if (input.limit() == 0) throw new RuntimeException("Unexpected input position, bad file?");
+    if (output.position() != output.limit()) throw new RuntimeException("Unexpected output position");
+    output.flip();
+
+    return fetchArgmax(output, labelColors, outputType);
+  }
+
+  byte[] fetchArgmax(ByteBuffer output, List<Long> labelColors, String outputType) {
     Tensor outputTensor = tfLite.getOutputTensor(0);
     int outputBatchSize = outputTensor.shape()[0];
     assert outputBatchSize == 1;
@@ -750,7 +810,11 @@ public class TflitePlugin implements MethodCallHandler {
     int outputWidth = outputTensor.shape()[2];
     int outputChannels = outputTensor.shape()[3];
 
-    Bitmap outputArgmax = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888);
+    Bitmap outputArgmax = null;
+    byte[] outputBytes = new byte[outputWidth * outputHeight * 4];
+    if (outputType.equals("png")) {
+      outputArgmax = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888);
+    }
 
     if (outputTensor.dataType() == DataType.FLOAT32) {
       for (int i = 0; i < outputHeight; ++i) {
@@ -765,7 +829,11 @@ public class TflitePlugin implements MethodCallHandler {
             }
           }
           int labelColor = labelColors.get(maxIndex).intValue();
-          outputArgmax.setPixel(j, i, labelColor);
+          if (outputType.equals("png")) {
+            outputArgmax.setPixel(j, i, labelColor);
+          } else {
+            setPixel(outputBytes, i * outputWidth + j, labelColor);
+          }
         }
       }
     } else {
@@ -781,11 +849,26 @@ public class TflitePlugin implements MethodCallHandler {
             }
           }
           int labelColor = labelColors.get(maxIndex).intValue();
-          outputArgmax.setPixel(j, i, labelColor);
+          if (outputType.equals("png")) {
+            outputArgmax.setPixel(j, i, labelColor);
+          } else {
+            setPixel(outputBytes, i * outputWidth + j, labelColor);
+          }
         }
       }
     }
-    return outputArgmax;
+    if (outputType.equals("png")) {
+      return compressPNG(outputArgmax);
+    } else {
+      return outputBytes;
+    }
+  }
+
+  void setPixel(byte[] rgba, int index, long color) {
+    rgba[index * 4] = (byte)((color >> 16) & 0xFF);
+    rgba[index * 4 + 1] = (byte)((color >> 8) & 0xFF);
+    rgba[index * 4 + 2] = (byte)(color & 0xFF);
+    rgba[index * 4 + 3] = (byte)((color >> 24) & 0xFF);
   }
 
   byte[] compressPNG(Bitmap bitmap) {
