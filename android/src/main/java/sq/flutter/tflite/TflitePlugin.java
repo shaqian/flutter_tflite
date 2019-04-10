@@ -1029,6 +1029,7 @@ public class TflitePlugin implements MethodCallHandler {
             setPixel(outputBytes, i * outputWidth + j, labelColor);
           }
         }
+        results.add(ret);
       }
     }
     if (outputType.equals("png")) {
