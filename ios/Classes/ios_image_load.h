@@ -5,8 +5,7 @@ std::vector<uint8_t> LoadImageFromFile(const char* file_name,
 						 int* out_height,
 						 int* out_channels);
 
-BOOL SaveImageToFile(NSMutableData*,
-						 const char* file_name,
+NSData *CompressImage(NSMutableData*,
 						 int width,
 						 int height,
              int bytesPerPixel);

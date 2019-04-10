@@ -709,7 +709,7 @@ void runPix2PixOnImage(NSDictionary* args, FlutterResult result) {
   const NSString* image_path = args[@"path"];
   const float input_mean = [args[@"imageMean"] floatValue];
   const float input_std = [args[@"imageStd"] floatValue];
-
+  const NSString* outputType = args[@"outputType"];
   NSMutableArray* empty = [@[] mutableCopy];
 
   if (!interpreter || interpreter_busy) {
@@ -731,17 +731,11 @@ void runPix2PixOnImage(NSDictionary* args, FlutterResult result) {
     if (output == NULL)
       return result(empty);
 
-    NSString *ext = image_path.pathExtension, *out_path = image_path.stringByDeletingPathExtension;
-    out_path = [NSString stringWithFormat:@"%@_pix2pix.%@", out_path, ext];
-    if (SaveImageToFile(output, [out_path UTF8String], width, height, 1)) {
-      NSMutableArray* results = [NSMutableArray array];
-      NSMutableDictionary* res = [NSMutableDictionary dictionary];
-      [res setObject:out_path forKey:@"filename"];
-      [results addObject:res];
-      return result(results);
+    if ([outputType isEqual: @"png"]) {
+      return result(CompressImage(output, width, height, 1));
+    } else {
+      return result(output);
     }
-
-    return result(empty);
   });
 }
 
@@ -768,12 +762,7 @@ void runPix2PixOnBinary(NSDictionary* args, FlutterResult result) {
     if (output == NULL)
       return result(empty);
 
-    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
-    NSMutableArray* results = [NSMutableArray array];
-    NSMutableDictionary* res = [NSMutableDictionary dictionary];
-    [res setObject:ret forKey:@"binary"];
-    [results addObject:res];
-    return result(results);
+    return result(output);
   });
 }
 
@@ -783,6 +772,7 @@ void runPix2PixOnFrame(NSDictionary* args, FlutterResult result) {
   const int image_width = [args[@"imageWidth"] intValue];
   const float input_mean = [args[@"imageMean"] floatValue];
   const float input_std = [args[@"imageStd"] floatValue];
+  const NSString* outputType = args[@"outputType"];
   NSMutableArray* empty = [@[] mutableCopy];
 
   if (!interpreter || interpreter_busy) {
@@ -801,16 +791,15 @@ void runPix2PixOnFrame(NSDictionary* args, FlutterResult result) {
     }
 
     int width = 0, height = 0;
-    NSMutableData* output = feedOutputTensor(0, 0, 1, false, &width, &height);
+    NSMutableData* output = feedOutputTensor(image_channels, input_mean, input_std, true, &width, &height);
     if (output == NULL)
       return result(empty);
 
-    FlutterStandardTypedData* ret = [FlutterStandardTypedData typedDataWithBytes: output];
-    NSMutableArray* results = [NSMutableArray array];
-    NSMutableDictionary* res = [NSMutableDictionary dictionary];
-    [res setObject:ret forKey:@"binary"];
-    [results addObject:res];
-    return result(results);
+    if ([outputType isEqual: @"png"]) {
+      return result(CompressImage(output, width, height, 1));
+    } else {
+      return result(output);
+    }
   });
 }
 

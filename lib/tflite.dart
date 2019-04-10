@@ -189,10 +189,11 @@ class Tflite {
     return await _channel.invokeMethod('close');
   }
 
-  static Future<List> runPix2PixOnImage(
+  static Future<Uint8List> runPix2PixOnImage(
       {@required String path,
       double imageMean = 0,
       double imageStd = 255.0,
+      String outputType = "png",
       bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnImage',
@@ -201,29 +202,33 @@ class Tflite {
         "imageMean": imageMean,
         "imageStd": imageStd,
         "asynch": asynch,
+        "outputType": outputType,
       },
     );
   }
 
-  static Future<List> runPix2PixOnBinary(
+  static Future<Uint8List> runPix2PixOnBinary(
       {@required Uint8List binary,
+      String outputType = "png",
       bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnBinary',
       {
         "binary": binary,
         "asynch": asynch,
+        "outputType": outputType,
       },
     );
   }
 
-  static Future<List> runPix2PixOnFrame({
+  static Future<Uint8List> runPix2PixOnFrame({
     @required List<Uint8List> bytesList,
     int imageHeight = 1280,
     int imageWidth = 720,
     double imageMean = 0,
     double imageStd = 255.0,
     int rotation: 90, // Android only
+    String outputType = "png",
     bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
@@ -236,6 +241,7 @@ class Tflite {
         "imageStd": imageStd,
         "rotation": rotation,
         "asynch": asynch,
+        "outputType": outputType,
       },
     );
   }

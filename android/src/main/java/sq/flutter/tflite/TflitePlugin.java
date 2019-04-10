@@ -553,8 +553,9 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private class RunPix2PixOnImage extends TfliteTask {
-    String path;
+    String path, outputType;
     float IMAGE_MEAN, IMAGE_STD;
+    long startTime;
     ByteBuffer input, output;
 
     RunPix2PixOnImage(HashMap args, Result result) throws IOException {
@@ -565,7 +566,8 @@ public class TflitePlugin implements MethodCallHandler {
       double std = (double)(args.get("imageStd"));
       IMAGE_STD = (float)std;
 
-      long startTime = SystemClock.uptimeMillis();
+      outputType = args.get("outputType").toString();
+      startTime = SystemClock.uptimeMillis();
       input = feedInputTensorImage(path, IMAGE_MEAN, IMAGE_STD);
       output = ByteBuffer.allocateDirect(input.limit());
       output.order(ByteOrder.nativeOrder());
@@ -576,34 +578,29 @@ public class TflitePlugin implements MethodCallHandler {
     protected void runTflite() { tfLite.run(input, output); }
 
     protected void onRunTfliteDone() {
+      Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
       if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
 
       output.flip();
       Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
-      String fileExt = path.substring(path.lastIndexOf('.')+1);
-      String outputFilename = path.substring(0, path.lastIndexOf('.')) + "_pix2pix." + fileExt;
-      try (FileOutputStream out = new FileOutputStream(outputFilename, false)) {
-        bitmapRaw.compress(Bitmap.CompressFormat.PNG, 100, out);
-      } catch (IOException e) {
-        e.printStackTrace();
-        outputFilename = "";
-      }
 
-      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
-      Map<String, Object> res = new HashMap<>();
-      res.put("filename", outputFilename);
-      ret.add(res);
-      result.success(ret);
+      if (outputType.equals("png")) {
+        result.success(compressPNG(bitmapRaw));
+      } else {
+        result.success(bitmapRaw);
+      }
     }
   }
 
   private class RunPix2PixOnBinary extends TfliteTask {
     long startTime;
+    String outputType;
     ByteBuffer input, output;
 
     RunPix2PixOnBinary(HashMap args, Result result) throws IOException {
       super(args, result);
       byte[] binary = (byte[])args.get("binary");
+      outputType = args.get("outputType").toString();
       startTime = SystemClock.uptimeMillis();
       input = ByteBuffer.wrap(binary);
       output = ByteBuffer.allocateDirect(input.limit());
@@ -619,16 +616,14 @@ public class TflitePlugin implements MethodCallHandler {
       Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
       if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
 
-      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
-      Map<String, Object> res = new HashMap<>();
-      res.put("binary", output.array());
-      ret.add(res);
-      result.success(ret);
+      output.flip();
+      result.success(output.array());
     }
   }
 
   private class RunPix2PixOnFrame extends TfliteTask {
     long startTime;
+    String outputType;
     float IMAGE_MEAN, IMAGE_STD;
     ByteBuffer input, output;
 
@@ -643,6 +638,7 @@ public class TflitePlugin implements MethodCallHandler {
       int imageWidth = (int)(args.get("imageWidth"));
       int rotation = (int)(args.get("rotation"));
 
+      outputType = args.get("outputType").toString();
       startTime = SystemClock.uptimeMillis();
       input = feedInputTensorFrame(bytesList, imageHeight, imageWidth, IMAGE_MEAN, IMAGE_STD, rotation);
       output = ByteBuffer.allocateDirect(input.limit());
@@ -658,11 +654,14 @@ public class TflitePlugin implements MethodCallHandler {
       Log.v("time", "Generating took " + (SystemClock.uptimeMillis() - startTime));
       if (output.position() != input.limit()) { result.error("Mismatching input/output position", null, null); return; }
 
-      final ArrayList<Map<String, Object>> ret = new ArrayList<>();
-      Map<String, Object> res = new HashMap<>();
-      res.put("binary", output.array());
-      ret.add(res);
-      result.success(ret);
+      output.flip();
+      Bitmap bitmapRaw = feedOutput(output, IMAGE_MEAN, IMAGE_STD);
+
+      if (outputType.equals("png")) {
+        result.success(compressPNG(bitmapRaw));
+      } else {
+        result.success(bitmapRaw);
+      }
     }
   }
 
@@ -897,8 +896,8 @@ public class TflitePlugin implements MethodCallHandler {
     protected void onRunTfliteDone() {
       Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
 
-      if (input.limit() == 0) result.error("Unexpected input position, bad file?", null, null);
-      if (output.position() != output.limit()) result.error("Unexpected output position", null, null);
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != output.limit()) { result.error("Unexpected output position", null, null); return; }
       output.flip();
 
       result.success(fetchArgmax(output, labelColors, outputType));
@@ -929,8 +928,8 @@ public class TflitePlugin implements MethodCallHandler {
     protected void onRunTfliteDone() {
       Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
 
-      if (input.limit() == 0) result.error("Unexpected input position, bad file?", null, null);
-      if (output.position() != output.limit()) result.error("Unexpected output position", null, null);
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != output.limit()) { result.error("Unexpected output position", null, null); return; }
       output.flip();
 
       result.success(fetchArgmax(output, labelColors, outputType));
@@ -968,8 +967,8 @@ public class TflitePlugin implements MethodCallHandler {
     protected void onRunTfliteDone() {
       Log.v("time", "Inference took " + (SystemClock.uptimeMillis() - startTime));
 
-      if (input.limit() == 0) result.error("Unexpected input position, bad file?", null, null);
-      if (output.position() != output.limit()) result.error("Unexpected output position", null, null);
+      if (input.limit() == 0) { result.error("Unexpected input position, bad file?", null, null); return; }
+      if (output.position() != output.limit()) { result.error("Unexpected output position", null, null); return; }
       output.flip();
 
       result.success(fetchArgmax(output, labelColors, outputType));
@@ -1029,7 +1028,6 @@ public class TflitePlugin implements MethodCallHandler {
             setPixel(outputBytes, i * outputWidth + j, labelColor);
           }
         }
-        results.add(ret);
       }
     }
     if (outputType.equals("png")) {
