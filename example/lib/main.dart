@@ -35,10 +35,12 @@ class _MyAppState extends State<MyApp> {
   String _model = mobile;
   double _imageHeight;
   double _imageWidth;
+  bool _busy = false;
 
   Future predictImagePicker() async {
     var image = await ImagePicker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    setState((){ _busy = true; });
     predictImage(image);
   }
 
@@ -47,17 +49,17 @@ class _MyAppState extends State<MyApp> {
 
     switch (_model) {
       case yolo:
-        yolov2Tiny(image);
+        await yolov2Tiny(image);
         break;
       case ssd:
-        ssdMobileNet(image);
+        await ssdMobileNet(image);
         break;
       case deeplab:
-        segmentMobileNet(image);
+        await segmentMobileNet(image);
         break;
       default:
-        recognizeImage(image);
-      // recognizeImageBinary(image);
+        await recognizeImage(image);
+      // await recognizeImageBinary(image);
     }
 
     new FileImage(image)
@@ -71,6 +73,7 @@ class _MyAppState extends State<MyApp> {
 
     setState(() {
       _image = image;
+      _busy = false;
     });
   }
 
@@ -224,11 +227,14 @@ class _MyAppState extends State<MyApp> {
 
   onSelect(model) async {
     setState(() {
+      _busy = true;
       _model = model;
       _recognitions = null;
     });
     await loadModel();
-    predictImage(_image);
+
+    if (_image != null) predictImage(_image);
+    else setState(() { _busy = false; });
   }
 
   List<Widget> renderBoxes(Size screen) {
@@ -311,6 +317,23 @@ class _MyAppState extends State<MyApp> {
       ));
     } else if (_model == ssd || _model == yolo) {
       stackChildren.addAll(renderBoxes(size));
+    }
+
+    if (_busy) {
+      stackChildren.add(
+        const Opacity(
+          child: ModalBarrier(
+            dismissible: false,
+            color: Colors.grey
+          ),
+          opacity: 0.3,
+        )
+      );
+      stackChildren.add(
+        const Center(
+          child: CircularProgressIndicator()
+        )
+      );
     }
 
     return Scaffold(

@@ -23,7 +23,8 @@ class Tflite {
       double imageMean = 117.0,
       double imageStd = 1.0,
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnImage',
       {
@@ -31,7 +32,8 @@ class Tflite {
         "imageMean": imageMean,
         "imageStd": imageStd,
         "numResults": numResults,
-        "threshold": threshold
+        "threshold": threshold,
+        "asynch": asynch,
       },
     );
   }
@@ -39,10 +41,16 @@ class Tflite {
   static Future<List> runModelOnBinary(
       {@required Uint8List binary,
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnBinary',
-      {"binary": binary, "numResults": numResults, "threshold": threshold},
+      {
+        "binary": binary,
+        "numResults": numResults,
+        "threshold": threshold,
+        "asynch": asynch,
+      },
     );
   }
 
@@ -54,7 +62,8 @@ class Tflite {
       double imageStd = 127.5,
       int rotation: 90, // Android only
       int numResults = 5,
-      double threshold = 0.1}) async {
+      double threshold = 0.1,
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnFrame',
       {
@@ -65,7 +74,8 @@ class Tflite {
         "imageStd": imageStd,
         "rotation": rotation,
         "numResults": numResults,
-        "threshold": threshold
+        "threshold": threshold,
+        "asynch": asynch,
       },
     );
   }
@@ -94,6 +104,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnImage',
@@ -106,7 +117,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -120,6 +132,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnBinary',
@@ -130,7 +143,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -149,6 +163,7 @@ class Tflite {
     List anchors = anchors,
     int blockSize = 32,
     int numBoxesPerBlock = 5,
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'detectObjectOnFrame',
@@ -164,7 +179,8 @@ class Tflite {
         "numResultsPerClass": numResultsPerClass,
         "anchors": anchors,
         "blockSize": blockSize,
-        "numBoxesPerBlock": numBoxesPerBlock
+        "numBoxesPerBlock": numBoxesPerBlock,
+        "asynch": asynch,
       },
     );
   }
@@ -173,34 +189,47 @@ class Tflite {
     return await _channel.invokeMethod('close');
   }
 
-  static Future<List> runPix2PixOnImage(
+  static Future<Uint8List> runPix2PixOnImage(
       {@required String path,
       double imageMean = 0,
-      double imageStd = 255.0}) async {
+      double imageStd = 255.0,
+      String outputType = "png",
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnImage',
       {
         "path": path,
         "imageMean": imageMean,
         "imageStd": imageStd,
+        "asynch": asynch,
+        "outputType": outputType,
       },
     );
   }
 
-  static Future<List> runPix2PixOnBinary({@required Uint8List binary}) async {
+  static Future<Uint8List> runPix2PixOnBinary(
+      {@required Uint8List binary,
+      String outputType = "png",
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnBinary',
-      {"binary": binary},
+      {
+        "binary": binary,
+        "asynch": asynch,
+        "outputType": outputType,
+      },
     );
   }
 
-  static Future<List> runPix2PixOnFrame({
+  static Future<Uint8List> runPix2PixOnFrame({
     @required List<Uint8List> bytesList,
     int imageHeight = 1280,
     int imageWidth = 720,
     double imageMean = 0,
     double imageStd = 255.0,
     int rotation: 90, // Android only
+    String outputType = "png",
+    bool asynch = true,
   }) async {
     return await _channel.invokeMethod(
       'runPix2PixOnFrame',
@@ -211,6 +240,8 @@ class Tflite {
         "imageMean": imageMean,
         "imageStd": imageStd,
         "rotation": rotation,
+        "asynch": asynch,
+        "outputType": outputType,
       },
     );
   }
@@ -245,7 +276,8 @@ class Tflite {
       double imageMean = 0,
       double imageStd = 255.0,
       List<int> labelColors,
-      String outputType = "png"}) async {
+      String outputType = "png",
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnImage',
       {
@@ -254,6 +286,7 @@ class Tflite {
         "imageStd": imageStd,
         "labelColors": labelColors ?? pascalVOCLabelColors,
         "outputType": outputType,
+        "asynch": asynch,
       },
     );
   }
@@ -261,13 +294,15 @@ class Tflite {
   static Future<Uint8List> runSegmentationOnBinary(
       {@required Uint8List binary,
       List<int> labelColors,
-      String outputType = "png"}) async {
+      String outputType = "png",
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnImage',
       {
         "binary": binary,
         "labelColors": labelColors ?? pascalVOCLabelColors,
         "outputType": outputType,
+        "asynch": asynch,
       },
     );
   }
@@ -280,7 +315,8 @@ class Tflite {
       double imageStd = 255.0,
       int rotation: 90, // Android only
       List<int> labelColors,
-      String outputType = "png"}) async {
+      String outputType = "png",
+      bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnImage',
       {
@@ -292,6 +328,7 @@ class Tflite {
         "rotation": rotation,
         "labelColors": labelColors ?? pascalVOCLabelColors,
         "outputType": outputType,
+        "asynch": asynch,
       },
     );
   }
