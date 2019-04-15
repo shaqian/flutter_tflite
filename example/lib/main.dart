@@ -40,7 +40,9 @@ class _MyAppState extends State<MyApp> {
   Future predictImagePicker() async {
     var image = await ImagePicker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
-    setState((){ _busy = true; });
+    setState(() {
+      _busy = true;
+    });
     predictImage(image);
   }
 
@@ -80,10 +82,10 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    loadModel();
   }
 
   Future loadModel() async {
+    Tflite.close();
     try {
       String res;
       switch (_model) {
@@ -233,12 +235,18 @@ class _MyAppState extends State<MyApp> {
     });
     await loadModel();
 
-    if (_image != null) predictImage(_image);
-    else setState(() { _busy = false; });
+    if (_image != null)
+      predictImage(_image);
+    else
+      setState(() {
+        _busy = false;
+      });
   }
 
   List<Widget> renderBoxes(Size screen) {
     if (_recognitions == null) return [];
+    if (_imageHeight == null || _imageWidth == null) return [];
+
     double factorX = screen.width;
     double factorY = _imageHeight / _imageWidth * screen.width;
     Color blue = Color.fromRGBO(37, 213, 253, 1.0);
@@ -320,20 +328,11 @@ class _MyAppState extends State<MyApp> {
     }
 
     if (_busy) {
-      stackChildren.add(
-        const Opacity(
-          child: ModalBarrier(
-            dismissible: false,
-            color: Colors.grey
-          ),
-          opacity: 0.3,
-        )
-      );
-      stackChildren.add(
-        const Center(
-          child: CircularProgressIndicator()
-        )
-      );
+      stackChildren.add(const Opacity(
+        child: ModalBarrier(dismissible: false, color: Colors.grey),
+        opacity: 0.3,
+      ));
+      stackChildren.add(const Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(

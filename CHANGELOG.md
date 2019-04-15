@@ -1,3 +1,8 @@
+## 1.0.3
+
+* Add an asynch option to offload the TfLite run from the UI thread
+* Add Deeplab support
+
 ## 1.0.2
 
 * Add pix2pix support

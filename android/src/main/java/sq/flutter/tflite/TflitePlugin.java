@@ -1097,7 +1097,8 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private void close() {
-    tfLite.close();
+    if (tfLite != null)
+      tfLite.close();
     labels = null;
     labelProb = null;
   }
