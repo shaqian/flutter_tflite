@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ const String mobile = "MobileNet";
 const String ssd = "SSD MobileNet";
 const String yolo = "Tiny YOLOv2";
 const String deeplab = "DeepLab";
+const String posenet = "PoseNet";
 
 class App extends StatelessWidget {
   @override
@@ -58,6 +60,9 @@ class _MyAppState extends State<MyApp> {
         break;
       case deeplab:
         await segmentMobileNet(image);
+        break;
+      case posenet:
+        await poseNet(image);
         break;
       default:
         await recognizeImage(image);
@@ -104,6 +109,10 @@ class _MyAppState extends State<MyApp> {
           res = await Tflite.loadModel(
               model: "assets/deeplabv3_257_mv_gpu.tflite",
               labels: "assets/deeplabv3_257_mv_gpu.txt");
+          break;
+        case posenet:
+          res = await Tflite.loadModel(
+              model: "assets/posenet_mv1_075_float_from_checkpoints.tflite");
           break;
         default:
           res = await Tflite.loadModel(
@@ -227,6 +236,19 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future poseNet(File image) async {
+    var recognitions = await Tflite.runPoseNetOnImage(
+      path: image.path,
+      numResults: 2,
+    );
+
+    print(recognitions);
+
+    setState(() {
+      _recognitions = recognitions;
+    });
+  }
+
   onSelect(model) async {
     setState(() {
       _busy = true;
@@ -277,6 +299,41 @@ class _MyAppState extends State<MyApp> {
     }).toList();
   }
 
+  List<Widget> renderKeypoints(Size screen) {
+    if (_recognitions == null) return [];
+    if (_imageHeight == null || _imageWidth == null) return [];
+
+    double factorX = screen.width;
+    double factorY = _imageHeight / _imageWidth * screen.width;
+
+    var lists = <Widget>[];
+    _recognitions.forEach((re) {
+      var color = Color((Random().nextDouble() * 0xFFFFFF).toInt() << 0)
+          .withOpacity(1.0);
+      var list = re["keypoints"].values.map<Widget>((k) {
+        return Positioned(
+          left: k["x"] * factorX - 6,
+          top: k["y"] * factorY - 6,
+          width: 100,
+          height: 12,
+          child: Container(
+            child: Text(
+              "● ${k["part"]}",
+              style: TextStyle(
+                color: color,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+        );
+      }).toList();
+
+      lists..addAll(list);
+    });
+
+    return lists;
+  }
+
   @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
@@ -325,6 +382,8 @@ class _MyAppState extends State<MyApp> {
       ));
     } else if (_model == ssd || _model == yolo) {
       stackChildren.addAll(renderBoxes(size));
+    } else if (_model == posenet) {
+      stackChildren.addAll(renderKeypoints(size));
     }
 
     if (_busy) {
@@ -358,6 +417,10 @@ class _MyAppState extends State<MyApp> {
                 const PopupMenuItem<String>(
                   child: Text(deeplab),
                   value: deeplab,
+                ),
+                const PopupMenuItem<String>(
+                  child: Text(posenet),
+                  value: posenet,
                 )
               ];
               return menuEntries;

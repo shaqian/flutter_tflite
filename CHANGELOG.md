@@ -1,3 +1,7 @@
+## 1.0.4
+
+* Add PoseNet support
+
 ## 1.0.3
 
 * Add an asynch option to offload the TfLite run from the UI thread

@@ -3,7 +3,7 @@ PODS:
   - image_picker (0.0.1):
     - Flutter
   - TensorFlowLite (1.12.0)
-  - tflite (1.0.3):
+  - tflite (1.0.4):
     - Flutter
     - TensorFlowLite
 
@@ -28,7 +28,7 @@ SPEC CHECKSUMS:
   Flutter: 9d0fac939486c9aba2809b7982dfdbb47a7b0296
   image_picker: ee00aab0487cedc80a304085219503cc6d0f2e22
   TensorFlowLite: e81aef029750aa46b42ad16553fa4cddd81498cc
-  tflite: f1966874335435ce6f49ebebf5e80fade09beb6b
+  tflite: 617c6736aaedeb6ac8f79bde4af08e6ba74be162
 
 PODFILE CHECKSUM: 1e5af4103afd21ca5ead147d7b81d06f494f51a2
 

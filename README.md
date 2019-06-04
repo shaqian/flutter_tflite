@@ -1,20 +1,21 @@
 # tflite
 
-A Flutter plugin for accessing TensorFlow Lite API. Supports image classification, object detection ([SSD](https://github.com/tensorflow/models/tree/master/research/object_detection) and [YOLO](https://pjreddie.com/darknet/yolov2/)), [Pix2Pix](https://phillipi.github.io/pix2pix/) and [Deeplab](https://github.com/tensorflow/models/tree/master/research/deeplab) on both iOS and Android.
+A Flutter plugin for accessing TensorFlow Lite API. Supports image classification, object detection ([SSD](https://github.com/tensorflow/models/tree/master/research/object_detection) and [YOLO](https://pjreddie.com/darknet/yolov2/)), [Pix2Pix](https://phillipi.github.io/pix2pix/) and [Deeplab](https://github.com/tensorflow/models/tree/master/research/deeplab) and [PoseNet](https://www.tensorflow.org/lite/models/pose_estimation/overview) on both iOS and Android.
 
 ### Table of Contents
 
 - [Installation](#Installation)
 - [Usage](#Usage)
-    - [Image Classification](#Image%20Classification)
-    - [Object Detection](#Object%20Detection)
-      - [SSD MobileNet](#SSD%20MobileNet)
-      - [YOLO](#Tiny%20YOLOv2)
+    - [Image Classification](#Image-Classification)
+    - [Object Detection](#Object-Detection)
+      - [SSD MobileNet](#SSD-MobileNet)
+      - [YOLO](#Tiny-YOLOv2)
     - [Pix2Pix](#Pix2Pix)
     - [Deeplab](#Deeplab)
+    - [PoseNet](#PoseNet)
 - [Example](#Example)
-    - [Prediction in Static Images](#Prediction%20in%20Static%20Images)
-    - [Real-time Detection](#Real-time%20Detection)
+    - [Prediction in Static Images](#Prediction-in-Static-Images)
+    - [Real-time Detection](#Real-time-Detection)
 
 ### Breaking changes since 1.0.0:
 
@@ -308,7 +309,7 @@ var result = await runPix2PixOnImage(
 
 ```dart
 var result = await runPix2PixOnBinary(
-  binary: binary,       // required;
+  binary: binary,       // required
   asynch: true      // defaults to true
 );
 ```
@@ -356,7 +357,7 @@ var result = await runSegmentationOnImage(
 
 ```dart
 var result = await runSegmentationOnBinary(
-  binary: binary,     // required;
+  binary: binary,     // required
   labelColors: [...], // defaults to https://github.com/shaqian/flutter_tflite/blob/master/lib/tflite.dart#L219
   outputType: "png",  // defaults to "png"
   asynch: true        // defaults to true
@@ -375,6 +376,99 @@ var result = await runSegmentationOnFrame(
   rotation: 90,            // defaults to 90, Android only
   labelColors: [...],      // defaults to https://github.com/shaqian/flutter_tflite/blob/master/lib/tflite.dart#L219
   outputType: "png",       // defaults to "png"
+  asynch: true             // defaults to true
+);
+```
+
+### PoseNet
+
+> Model is from [StackOverflow thread](https://stackoverflow.com/a/55288616).
+
+- Output format:
+
+`x, y` are between [0, 1]. You can scale `x` by the width and `y` by the height of the image.
+
+```
+[ // array of poses/persons
+  { // pose #1
+    score: 0.6324902,
+    keypoints: {
+      0: {
+        x: 0.250,
+        y: 0.125,
+        part: nose,
+        score: 0.9971070
+      },
+      1: {
+        x: 0.230,
+        y: 0.105,
+        part: leftEye,
+        score: 0.9978438
+      }
+      ......
+    }
+  },
+  { // pose #2
+    score: 0.32534285,
+    keypoints: {
+      0: {
+        x: 0.402,
+        y: 0.538,
+        part: nose,
+        score: 0.8798978
+      },
+      1: {
+        x: 0.380,
+        y: 0.513,
+        part: leftEye,
+        score: 0.7090239
+      }
+      ......
+    }
+  },
+  ......
+]
+```
+
+- Run on image:
+
+```dart
+var result = await runPoseNetOnImage(
+  path: filepath,     // required
+  imageMean: 125.0,   // defaults to 125.0
+  imageStd: 125.0,    // defaults to 125.0
+  numResults: 2,      // defaults to 5
+  threshold: 0.7,     // defaults to 0.5
+  nmsRadius: 10,      // defaults to 20
+  asynch: true        // defaults to true
+);
+```
+
+- Run on binary:
+
+```dart
+var result = await runPoseNetOnBinary(
+  binary: binary,     // required
+  numResults: 2,      // defaults to 5
+  threshold: 0.7,     // defaults to 0.5
+  nmsRadius: 10,      // defaults to 20
+  asynch: true        // defaults to true
+);
+```
+
+- Run on image stream (video frame):
+
+```dart
+var result = await runPoseNetOnFrame(
+  bytesList: img.planes.map((plane) {return plane.bytes;}).toList(),// required
+  imageHeight: img.height, // defaults to 1280
+  imageWidth: img.width,   // defaults to 720
+  imageMean: 125.0,        // defaults to 125.0
+  imageStd: 125.0,         // defaults to 125.0
+  rotation: 90,            // defaults to 90, Android only
+  numResults: 2,           // defaults to 5
+  threshold: 0.7,          // defaults to 0.5
+  nmsRadius: 10,           // defaults to 20
   asynch: true             // defaults to true
 );
 ```

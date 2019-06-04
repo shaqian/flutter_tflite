@@ -14,6 +14,9 @@ dowload the following files and place them in `assets` folder.
  - ssd_mobilenet.txt
  - yolov2_tiny.tflite
  - yolov2_tiny.txt
+ - deeplabv3_257_mv_gpu.tflite
+ - deeplabv3_257_mv_gpu.txt
+ - posenet_mv1_075_float_from_checkpoints.tflite
 
 ## Install 
 
