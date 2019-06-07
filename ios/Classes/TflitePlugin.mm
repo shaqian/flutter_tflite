@@ -121,9 +121,7 @@ static void LoadLabels(NSString* labels_path,
   }
   std::ifstream t;
   t.open([labels_path UTF8String]);
-  std::string line;
-  while (t) {
-    std::getline(t, line);
+  for (std::string line; std::getline(t, line); ) {
     label_strings->push_back(line);
   }
   t.close();
