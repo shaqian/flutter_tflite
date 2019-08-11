@@ -71,12 +71,12 @@ class _MyAppState extends State<MyApp> {
 
     new FileImage(image)
         .resolve(new ImageConfiguration())
-        .addListener((ImageInfo info, bool _) {
+        .addListener(ImageStreamListener((ImageInfo info, bool _) {
       setState(() {
         _imageHeight = info.image.height.toDouble();
         _imageWidth = info.image.width.toDouble();
       });
-    });
+    }));
 
     setState(() {
       _image = image;
@@ -87,6 +87,14 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+
+    _busy = true;
+
+    loadModel().then((val) {
+      setState(() {
+        _busy = false; 
+      });
+    });
   }
 
   Future loadModel() async {
