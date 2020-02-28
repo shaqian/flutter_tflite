@@ -7,3 +7,7 @@
 build/
 
 .flutter-plugins
+.flutter-plugins-dependencies
+
+flutter_export_environment.sh
+Flutter.podspec

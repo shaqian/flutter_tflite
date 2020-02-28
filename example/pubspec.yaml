@@ -26,7 +26,7 @@ dev_dependencies:
 
   image_picker: ^0.4.10
   
-  image: 2.0.5
+  image: ^2.1.4
 
   tflite:
     path: ../

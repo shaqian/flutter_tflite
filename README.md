@@ -40,7 +40,20 @@ In `android/app/build.gradle`, add the following setting in `android` block.
 
 ### iOS
 
-If you get error like "'vector' file not found", please open `ios/Runner.xcworkspace` in Xcode, click Runner > Tagets > Runner > Build Settings, search `Compile Sources As`, change the value to `Objective-C++`;
+Solutions to build errors on iOS:
+
+* 'vector' file not found"
+
+  Open `ios/Runner.xcworkspace` in Xcode, click Runner > Tagets > Runner > Build Settings, search `Compile Sources As`, change the value to `Objective-C++`
+
+* 'tensorflow/lite/kernels/register.h' file not found
+
+  The plugin assumes the tensorflow header files are located in path "tensorflow/lite/kernels".
+
+  However, for early versions of tensorflow the header path is "tensorflow/contrib/lite/kernels".
+
+  Use `CONTRIB_PATH` to toggle the path. Uncomment `//#define CONTRIB_PATH` from here:
+  https://github.com/shaqian/flutter_tflite/blob/master/ios/Classes/TflitePlugin.mm#L1
 
 ## Usage
 

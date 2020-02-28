@@ -1,3 +1,10 @@
+## 1.0.5
+
+* Set compileSdkVersion to 28, fixing build error "Execution failed for task ':tflite:verifyReleaseResources'."
+* Add notes about CONTRIB_PATH.
+* Update pubspec.yaml for Flutter 1.10.0 and later.
+* Update example app to use image plugin 2.1.4.
+
 ## 1.0.4
 
 * Add PoseNet support

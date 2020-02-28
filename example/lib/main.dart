@@ -181,7 +181,7 @@ class _MyAppState extends State<MyApp> {
   Future recognizeImageBinary(File image) async {
     var imageBytes = (await rootBundle.load(image.path)).buffer;
     img.Image oriImage = img.decodeJpg(imageBytes.asUint8List());
-    img.Image resizedImage = img.copyResize(oriImage, 224, 224);
+    img.Image resizedImage = img.copyResize(oriImage, height: 224, width: 224);
     var recognitions = await Tflite.runModelOnBinary(
       binary: imageToByteListFloat32(resizedImage, 224, 127.5, 127.5),
       numResults: 6,
@@ -324,13 +324,11 @@ class _MyAppState extends State<MyApp> {
           top: k["y"] * factorY - 6,
           width: 100,
           height: 12,
-          child: Container(
-            child: Text(
-              "● ${k["part"]}",
-              style: TextStyle(
-                color: color,
-                fontSize: 12.0,
-              ),
+          child: Text(
+            "● ${k["part"]}",
+            style: TextStyle(
+              color: color,
+              fontSize: 12.0,
             ),
           ),
         );
