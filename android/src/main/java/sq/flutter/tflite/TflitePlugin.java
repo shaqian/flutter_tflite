@@ -231,8 +231,8 @@ public class TflitePlugin implements MethodCallHandler {
         key = mRegistrar.lookupKeyForAsset(labels);
         loadLabels(assetManager, key);
       } else {
-        Log.v("debug", "loadLabels.key=" + key);
-        loadLabels(null, key);
+        Log.v("debug", "labels=" + labels);
+        loadLabels(null, labels);
       }
     }
 
