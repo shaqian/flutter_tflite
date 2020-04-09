@@ -129,8 +129,17 @@ static void LoadLabels(NSString* labels_path,
 }
 
 NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* args) {
-  NSString* key = [_registrar lookupKeyForAsset:args[@"model"]];
-  NSString* graph_path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
+  NSString* graph_path;
+  NSString* key;
+  NSNumber* isAssetNumber = args[@"isAsset"];
+  bool isAsset = [isAssetNumber intValue]==1;
+  if(isAsset){
+    key = [_registrar lookupKeyForAsset:args[@"model"]];
+    graph_path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
+  }else{
+    graph_path = args[@"model"];
+  }
+
   const int num_threads = [args[@"numThreads"] intValue];
   
   model = tflite::FlatBufferModel::BuildFromFile([graph_path UTF8String]);
@@ -142,8 +151,13 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   LOG(INFO) << "resolved reporter";
   
   if ([args[@"labels"] length] > 0) {
-    key = [_registrar lookupKeyForAsset:args[@"labels"]];
-    NSString* labels_path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
+    NSString* labels_path;
+    if(isAsset){
+      key = [_registrar lookupKeyForAsset:args[@"labels"]];
+      labels_path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
+    }else{
+      labels_path = args[@"labels"];
+    }
     LoadLabels(labels_path, &labels);
   }
   
@@ -162,6 +176,7 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   }
   return @"success";
 }
+
 
 void runTflite(NSDictionary* args, TfLiteStatusCallback cb) {
   const bool asynch = [args[@"asynch"] boolValue];
