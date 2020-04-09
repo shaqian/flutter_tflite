@@ -193,14 +193,23 @@ public class TflitePlugin implements MethodCallHandler {
 
   private String loadModel(HashMap args) throws IOException {
     String model = args.get("model").toString();
-    AssetManager assetManager = mRegistrar.context().getAssets();
-    String key = mRegistrar.lookupKeyForAsset(model);
-    AssetFileDescriptor fileDescriptor = assetManager.openFd(key);
-    FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-    FileChannel fileChannel = inputStream.getChannel();
-    long startOffset = fileDescriptor.getStartOffset();
-    long declaredLength = fileDescriptor.getDeclaredLength();
-    MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    boolean isAsset = ((int)args.get("isAsset") == 1);
+    MappedByteBuffer buffer = null;
+    if (isAsset) {
+      AssetManager assetManager = mRegistrar.context().getAssets();
+      String key = mRegistrar.lookupKeyForAsset(model);
+      AssetFileDescriptor fileDescriptor = assetManager.openFd(key);
+      FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+      FileChannel fileChannel = inputStream.getChannel();
+      long startOffset = fileDescriptor.getStartOffset();
+      long declaredLength = fileDescriptor.getDeclaredLength();
+      buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    } else {
+      FileChannel fileChannel = new FileInputStream(File(model)).getChannel();
+      long startOffset = fileDescriptor.getStartOffset();
+      long declaredLength = fileDescriptor.getDeclaredLength();
+      buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    }
 
     int numThreads = (int) args.get("numThreads");
     final Interpreter.Options tfliteOptions = new Interpreter.Options();
@@ -210,8 +219,12 @@ public class TflitePlugin implements MethodCallHandler {
     String labels = args.get("labels").toString();
 
     if (labels.length() > 0) {
-      key = mRegistrar.lookupKeyForAsset(labels);
-      loadLabels(assetManager, key);
+      if (isAsset) {
+        key = mRegistrar.lookupKeyForAsset(labels);
+        loadLabels(assetManager, key);
+      } else {
+        loadLabels(null, key);
+      }
     }
 
     return "success";
@@ -220,7 +233,11 @@ public class TflitePlugin implements MethodCallHandler {
   private void loadLabels(AssetManager assetManager, String path) {
     BufferedReader br;
     try {
-      br = new BufferedReader(new InputStreamReader(assetManager.open(path)));
+      if (assetManager != null) {
+        br = new BufferedReader(new InputStreamReader(assetManager.open(path)));
+      } else {
+        br = new BufferedReader(new InputStreamReader(new FileInputStream(new File(path))));
+      }
       String line;
       labels = new Vector<>();
       while ((line = br.readLine()) != null) {
