@@ -195,11 +195,11 @@ public class TflitePlugin implements MethodCallHandler {
 
   private String loadModel(HashMap args) throws IOException {
     String model = args.get("model").toString();
-    boolean isAsset = ((int)args.get("isAsset") == 1);
+    int isAsset = (int) args.get("isAsset");
     MappedByteBuffer buffer = null;
     String key = null;
     AssetManager assetManager = null;
-    if (isAsset) {
+    if (isAsset == 1) {
       assetManager = mRegistrar.context().getAssets();
       key = mRegistrar.lookupKeyForAsset(model);
       AssetFileDescriptor fileDescriptor = assetManager.openFd(key);
@@ -223,7 +223,7 @@ public class TflitePlugin implements MethodCallHandler {
     String labels = args.get("labels").toString();
 
     if (labels.length() > 0) {
-      if (isAsset) {
+      if (isAsset == 1) {
         key = mRegistrar.lookupKeyForAsset(labels);
         loadLabels(assetManager, key);
       } else {
