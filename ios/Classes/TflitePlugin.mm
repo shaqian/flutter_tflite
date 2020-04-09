@@ -131,8 +131,8 @@ static void LoadLabels(NSString* labels_path,
 NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* args) {
   NSString* graph_path;
   NSString* key;
-  NSString* isAssetString = args[@"isAsset"];
-  bool isAsset = [isAssetString isEqualToString:@"true"];
+  NSNumber* isAssetNumber = args[@"isAsset"];
+  bool isAsset = [isAssetNumber boolValue];
   if(isAsset){
     key = [_registrar lookupKeyForAsset:args[@"model"]];
     graph_path = [[NSBundle mainBundle] pathForResource:key ofType:nil];
