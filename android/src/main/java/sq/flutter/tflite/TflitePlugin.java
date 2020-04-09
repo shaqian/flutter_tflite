@@ -208,11 +208,9 @@ public class TflitePlugin implements MethodCallHandler {
       buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     } else {
       FileInputStream inputStream = new FileInputStream(new File(model));
-      FileDescriptor fileDescriptor = inputStream.getFD();
       FileChannel fileChannel = inputStream.getChannel();
-      long startOffset = fileDescriptor.getStartOffset();
-      long declaredLength = fileDescriptor.getDeclaredLength();
-      buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+      long declaredLength = fileChannel.size();
+      buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, declaredLength);
     }
 
     int numThreads = (int) args.get("numThreads");
