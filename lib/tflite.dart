@@ -19,7 +19,7 @@ class Tflite {
         "model": model,
         "labels": labels,
         "numThreads": numThreads,
-        "isAsset": (isAsset) ? 1 : 0,
+        "isAsset": isAsset,
       },
     );
   }
