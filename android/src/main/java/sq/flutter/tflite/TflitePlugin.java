@@ -28,6 +28,7 @@ import org.tensorflow.lite.Tensor;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -206,7 +207,9 @@ public class TflitePlugin implements MethodCallHandler {
       long declaredLength = fileDescriptor.getDeclaredLength();
       buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     } else {
-      FileChannel fileChannel = new FileInputStream(new File(model)).getChannel();
+      FileInputStream inputStream = new FileInputStream(new File(model));
+      FileDescriptor fileDescriptor = inputStream.getFD();
+      FileChannel fileChannel = inputStream.getChannel();
       long startOffset = fileDescriptor.getStartOffset();
       long declaredLength = fileDescriptor.getDeclaredLength();
       buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
