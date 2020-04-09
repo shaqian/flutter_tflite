@@ -194,11 +194,11 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private String loadModel(HashMap args) throws IOException {
-    Log.v("loadModel");
+    Log.v("debug", "loadModel");
     String model = args.get("model").toString();
     Object isAssetObj = args.get("isAsset");
     boolean isAsset = isAssetObj == null ? false : (boolean) isAssetObj;
-    Log.v("isAsset=" + isAsset);
+    Log.v("debug", "isAsset=" + isAsset);
     MappedByteBuffer buffer = null;
     String key = null;
     AssetManager assetManager = null;
@@ -212,7 +212,7 @@ public class TflitePlugin implements MethodCallHandler {
       long declaredLength = fileDescriptor.getDeclaredLength();
       buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     } else {
-      Log.v("model=" + model);
+      Log.v("debug", "model=" + model);
       FileInputStream inputStream = new FileInputStream(new File(model));
       FileChannel fileChannel = inputStream.getChannel();
       long declaredLength = fileChannel.size();
@@ -231,7 +231,7 @@ public class TflitePlugin implements MethodCallHandler {
         key = mRegistrar.lookupKeyForAsset(labels);
         loadLabels(assetManager, key);
       } else {
-        Log.v("loadLabels.key=" + key);
+        Log.v("debug", "loadLabels.key=" + key);
         loadLabels(null, key);
       }
     }
@@ -250,7 +250,7 @@ public class TflitePlugin implements MethodCallHandler {
       String line;
       labels = new Vector<>();
       while ((line = br.readLine()) != null) {
-        Log.v("line=" + line);
+        Log.v("debug", "line=" + line);
         labels.add(line);
       }
       labelProb = new float[1][labels.size()];
