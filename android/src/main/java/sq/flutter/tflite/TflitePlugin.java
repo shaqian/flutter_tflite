@@ -198,8 +198,9 @@ public class TflitePlugin implements MethodCallHandler {
     boolean isAsset = ((int)args.get("isAsset") == 1);
     MappedByteBuffer buffer = null;
     String key = null;
+    AssetManager assetManager = null;
     if (isAsset) {
-      AssetManager assetManager = mRegistrar.context().getAssets();
+      assetManager = mRegistrar.context().getAssets();
       key = mRegistrar.lookupKeyForAsset(model);
       AssetFileDescriptor fileDescriptor = assetManager.openFd(key);
       FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
