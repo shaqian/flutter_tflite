@@ -91,7 +91,7 @@ await Tflite.close();
 
 ### Image Classification
 
-- Output fomart:
+- Output format:
 ```
 {
   index: 0,
@@ -175,7 +175,7 @@ var recognitions = await Tflite.runModelOnFrame(
 
 ### Object Detection
 
-- Output fomart:
+- Output format:
 
 `x, y, w, h` are between [0, 1]. You can scale `x, w` by the width and `y, h` by the height of the image.
 
