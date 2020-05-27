@@ -1,3 +1,9 @@
+## 1.0.6
+
+* Add support for resources outside packaged assets.
+* Upgrade version of Flutter SDK and Android Studio.
+* Set mininum SDK version to 2.1.0
+
 ## 1.0.5
 
 * Set compileSdkVersion to 28, fixing build error "Execution failed for task ':tflite:verifyReleaseResources'."
