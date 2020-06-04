@@ -7,12 +7,12 @@ import 'package:flutter/services.dart';
 class Tflite {
   static const MethodChannel _channel = const MethodChannel('tflite');
 
-  static Future<String> loadModel({
-    @required String model,
-    String labels = "",
-    int numThreads = 1,
-    bool isAsset = true,
-  }) async {
+  static Future<String> loadModel(
+      {@required String model,
+      String labels = "",
+      int numThreads = 1,
+      bool isAsset = true,
+      bool useGpuDelegate = false}) async {
     return await _channel.invokeMethod(
       'loadModel',
       {
@@ -20,6 +20,7 @@ class Tflite {
         "labels": labels,
         "numThreads": numThreads,
         "isAsset": isAsset,
+        'useGpuDelegate': useGpuDelegate
       },
     );
   }

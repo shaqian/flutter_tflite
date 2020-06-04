@@ -26,6 +26,8 @@ import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.Tensor;
 
+import org.tensorflow.lite.gpu.GpuDelegate;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -195,6 +197,7 @@ public class TflitePlugin implements MethodCallHandler {
   private String loadModel(HashMap args) throws IOException {
     String model = args.get("model").toString();
     Object isAssetObj = args.get("isAsset");
+    Object useGpuDelegateObj = args.get("useGpuDelegate");
     boolean isAsset = isAssetObj == null ? false : (boolean) isAssetObj;
     MappedByteBuffer buffer = null;
     String key = null;
@@ -216,8 +219,14 @@ public class TflitePlugin implements MethodCallHandler {
     }
 
     int numThreads = (int) args.get("numThreads");
+    boolean useGpuDelegate = useGpuDelegateObj == null ? false : (boolean) useGpuDelegate;
+
     final Interpreter.Options tfliteOptions = new Interpreter.Options();
     tfliteOptions.setNumThreads(numThreads);
+    if (useGpuDelegate){
+      GpuDelegate delegate = new GpuDelegate();
+      tfliteOptions.addDelegate(delegate)
+    }
     tfLite = new Interpreter(buffer, tfliteOptions);
 
     String labels = args.get("labels").toString();
