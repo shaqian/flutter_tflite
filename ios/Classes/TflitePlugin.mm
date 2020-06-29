@@ -1,4 +1,5 @@
 //#define CONTRIB_PATH
+#define TFLITE2
 
 #import "TflitePlugin.h"
 
@@ -15,6 +16,9 @@
 #include "tensorflow/contrib/lite/model.h"
 #include "tensorflow/contrib/lite/string_util.h"
 #include "tensorflow/contrib/lite/op_resolver.h"
+#elif defined TFLITE2
+#import "TensorFlowLiteC.h"
+#import "metal_delegate.h"
 #else
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -110,8 +114,14 @@ void close();
 @end
 
 std::vector<std::string> labels;
+#ifdef TFLITE2
+TfLiteInterpreter *interpreter = nullptr;
+TfLiteModel *model = nullptr;
+TfLiteDelegate *delegate = nullptr;
+#else
 std::unique_ptr<tflite::FlatBufferModel> model;
 std::unique_ptr<tflite::Interpreter> interpreter;
+#endif
 bool interpreter_busy = false;
 
 static void LoadLabels(NSString* labels_path,
@@ -142,6 +152,21 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
 
   const int num_threads = [args[@"numThreads"] intValue];
   
+#ifdef TFLITE2
+  TfLiteInterpreterOptions *options = nullptr;
+  model = TfLiteModelCreateFromFile(graph_path.UTF8String);
+  if (!model) {
+    return [NSString stringWithFormat:@"%s %@", "Failed to mmap model", graph_path];
+  }
+  options = TfLiteInterpreterOptionsCreate();
+  TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
+  
+  bool useGpuDelegate = [args[@"useGpuDelegate"] boolValue];
+  if (useGpuDelegate) {
+    delegate = TFLGpuDelegateCreate(nullptr);
+    TfLiteInterpreterOptionsAddDelegate(options, delegate);
+  }
+#else
   model = tflite::FlatBufferModel::BuildFromFile([graph_path UTF8String]);
   if (!model) {
     return [NSString stringWithFormat:@"%s %@", "Failed to mmap model", graph_path];
@@ -149,6 +174,7 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   LOG(INFO) << "Loaded model " << graph_path;
   model->error_reporter();
   LOG(INFO) << "resolved reporter";
+#endif
   
   if ([args[@"labels"] length] > 0) {
     NSString* labels_path;
@@ -160,7 +186,17 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
     }
     LoadLabels(labels_path, &labels);
   }
+
+#ifdef TFLITE2
+  interpreter = TfLiteInterpreterCreate(model, options);
+  if (!interpreter) {
+    return @"Failed to construct interpreter";
+  }
   
+  if (TfLiteInterpreterAllocateTensors(interpreter) != kTfLiteOk) {
+     return @"Failed to allocate tensors!";
+   }
+#else
   tflite::ops::builtin::BuiltinOpResolver resolver;
   tflite::InterpreterBuilder(*model, resolver)(&interpreter);
   if (!interpreter) {
@@ -174,6 +210,8 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   if (num_threads != -1) {
     interpreter->SetNumThreads(num_threads);
   }
+  #endif
+  
   return @"success";
 }
 
@@ -183,36 +221,53 @@ void runTflite(NSDictionary* args, TfLiteStatusCallback cb) {
   if (asynch) {
     interpreter_busy = true;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
+#ifdef TFLITE2
+      TfLiteStatus status = TfLiteInterpreterInvoke(interpreter);
+#else
       TfLiteStatus status = interpreter->Invoke();
+#endif
       dispatch_async(dispatch_get_main_queue(), ^(void){
         interpreter_busy = false;
         cb(status);
       });
     });
   } else {
+#ifdef TFLITE2
+    TfLiteStatus status = TfLiteInterpreterInvoke(interpreter);
+#else
     TfLiteStatus status = interpreter->Invoke();
+#endif
     cb(status);
   }
 }
 
 NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, bool convertToUint8,
                                 int *widthOut, int *heightOut) {
+#ifdef TFLITE2
+  assert(TfLiteInterpreterGetOutputTensorCount(interpreter) == 1);
+  const TfLiteTensor* output_tensor = TfLiteInterpreterGetOutputTensor(interpreter, 0);
+#else
   assert(interpreter->outputs().size() == 1);
   int output = interpreter->outputs()[0];
   TfLiteTensor* output_tensor = interpreter->tensor(output);
+#endif
   const int width = output_tensor->dims->data[2];
   const int channels = output_tensor->dims->data[3];
   const int outputChannels = outputChannelsIn ? outputChannelsIn : channels;
   assert(outputChannels >= channels);
   if (widthOut) *widthOut = width;
   if (heightOut) *heightOut = width;
-
+  
   NSMutableData *data = nil;
   if (output_tensor->type == kTfLiteUInt8) {
     int size = width*width*outputChannels;
     data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
     uint8_t* out = (uint8_t*)[data bytes], *outEnd = out + width*width*outputChannels;
+#ifdef TFLITE2
+    const uint8_t* bytes = output_tensor->data.uint8;
+#else
     const uint8_t* bytes = interpreter->typed_tensor<uint8_t>(output);
+#endif
     while (out != outEnd) {
       for (int c = 0; c < channels; c++)
         *out++ = *bytes++;
@@ -224,7 +279,11 @@ NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, boo
       int size = width*width*outputChannels;
       data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
       uint8_t* out = (uint8_t*)[data bytes], *outEnd = out + width*width*outputChannels;
+#ifdef TFLITE2
+      const float* bytes = output_tensor->data.f;
+#else
       const float* bytes = interpreter->typed_tensor<float>(output);
+#endif
       while (out != outEnd) {
         for (int c = 0; c < channels; c++)
           *out++ = (*bytes++ * std) + mean;
@@ -235,7 +294,11 @@ NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, boo
       int size = width*width*outputChannels*4;
       data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
       float* out = (float*)[data bytes], *outEnd = out + width*width*outputChannels;
+#ifdef TFLITE2
+      float* bytes = output_tensor->data.f;
+#else
       const float* bytes = interpreter->typed_tensor<float>(output);
+#endif
       while (out != outEnd) {
         for (int c = 0; c < channels; c++)
           *out++ = (*bytes++ * std) + mean;
@@ -248,37 +311,59 @@ NSMutableData *feedOutputTensor(int outputChannelsIn, float mean, float std, boo
 }
 
 void feedInputTensorBinary(const FlutterStandardTypedData* typedData, int* input_size) {
+#ifdef TFLITE2
+  assert(TfLiteInterpreterGetInputTensorCount(interpreter) == 1);
+  TfLiteTensor* input_tensor = TfLiteInterpreterGetInputTensor(interpreter, 0);
+#else
   assert(interpreter->inputs().size() == 1);
   int input = interpreter->inputs()[0];
   TfLiteTensor* input_tensor = interpreter->tensor(input);
+#endif
   const int width = input_tensor->dims->data[2];
   *input_size = width;
   NSData* in = [typedData data];
-  
+
   if (input_tensor->type == kTfLiteUInt8) {
+#ifdef TFLITE2
+    TfLiteTensorCopyFromBuffer(input_tensor, in.bytes, in.length);
+#else
     uint8_t* out = interpreter->typed_tensor<uint8_t>(input);
     const uint8_t* bytes = (const uint8_t*)[in bytes];
     for (int index = 0; index < [in length]; index++)
       out[index] = bytes[index];
+#endif
   } else { // kTfLiteFloat32
+#ifdef TFLITE2
+    TfLiteTensorCopyFromBuffer(input_tensor, in.bytes, in.length);
+#else
     float* out = interpreter->typed_tensor<float>(input);
     const float* bytes = (const float*)[in bytes];
     for (int index = 0; index < [in length]/4; index++)
       out[index] = bytes[index];
+#endif
   }
 }
 
 void feedInputTensor(uint8_t* in, int* input_size, int image_height, int image_width, int image_channels, float input_mean, float input_std) {
+#ifdef TFLITE2
+  assert(TfLiteInterpreterGetInputTensorCount(interpreter) == 1);
+  TfLiteTensor* input_tensor = TfLiteInterpreterGetInputTensor(interpreter, 0);
+#else
   assert(interpreter->inputs().size() == 1);
   int input = interpreter->inputs()[0];
   TfLiteTensor* input_tensor = interpreter->tensor(input);
+#endif
   const int input_channels = input_tensor->dims->data[3];
   const int width = input_tensor->dims->data[2];
   const int height = input_tensor->dims->data[1];
   *input_size = width;
-  
+
   if (input_tensor->type == kTfLiteUInt8) {
+#ifdef TFLITE2
+    uint8_t* out = input_tensor->data.uint8;
+#else
     uint8_t* out = interpreter->typed_tensor<uint8_t>(input);
+#endif
     for (int y = 0; y < height; ++y) {
       const int in_y = (y * image_height) / height;
       uint8_t* in_row = in + (in_y * image_width * image_channels);
@@ -293,7 +378,11 @@ void feedInputTensor(uint8_t* in, int* input_size, int image_height, int image_w
       }
     }
   } else { // kTfLiteFloat32
+#ifdef TFLITE2
+    float* out = input_tensor->data.f;
+#else
     float* out = interpreter->typed_tensor<float>(input);
+#endif
     for (int y = 0; y < height; ++y) {
       const int in_y = (y * image_height) / height;
       uint8_t* in_row = in + (in_y * image_width * image_channels);
@@ -388,12 +477,15 @@ void runModelOnImage(NSDictionary* args, FlutterResult result) {
       NSLog(@"Failed to invoke!");
       return result(empty);
     }
-
+    
+#ifdef TFLITE2
+    float* output = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+#else
     float* output = interpreter->typed_output_tensor<float>(0);
-
+#endif
     if (output == NULL)
       return result(empty);
-
+    
     const unsigned long output_size = labels.size();
     const int num_results = [args[@"numResults"] intValue];
     const float threshold = [args[@"threshold"] floatValue];
@@ -418,12 +510,15 @@ void runModelOnBinary(NSDictionary* args, FlutterResult result) {
       NSLog(@"Failed to invoke!");
       return result(empty);
     }
-
+    
+#ifdef TFLITE2
+    float* output = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+#else
     float* output = interpreter->typed_output_tensor<float>(0);
-
+#endif
     if (output == NULL)
       return result(empty);
-
+    
     const unsigned long output_size = labels.size();
     const int num_results = [args[@"numResults"] intValue];
     const float threshold = [args[@"threshold"] floatValue];
@@ -454,8 +549,11 @@ void runModelOnFrame(NSDictionary* args, FlutterResult result) {
       return result(empty);
     }
 
+#ifdef TFLITE2
+    float* output = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+#else
     float* output = interpreter->typed_output_tensor<float>(0);
-
+#endif
     if (output == NULL)
       return result(empty);
 
@@ -467,14 +565,24 @@ void runModelOnFrame(NSDictionary* args, FlutterResult result) {
 }
 
 NSMutableArray* parseSSDMobileNet(float threshold, int num_results_per_class) {
+#ifdef TFLITE2
+  assert(TfLiteInterpreterGetOutputTensorCount(interpreter) == 4);
+#else
   assert(interpreter->outputs().size() == 4);
-  
+#endif
   NSMutableArray* results = [NSMutableArray array];
+#ifdef TFLITE2
+  float* output_locations = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+  float* output_classes = TfLiteInterpreterGetOutputTensor(interpreter, 1)->data.f;
+  float* output_scores = TfLiteInterpreterGetOutputTensor(interpreter, 2)->data.f;
+  float* num_detections = TfLiteInterpreterGetOutputTensor(interpreter, 3)->data.f;
+#else
   float* output_locations = interpreter->typed_output_tensor<float>(0);
   float* output_classes = interpreter->typed_output_tensor<float>(1);
   float* output_scores = interpreter->typed_output_tensor<float>(2);
   float* num_detections = interpreter->typed_output_tensor<float>(3);
-  
+#endif
+
   NSMutableDictionary* counters = [NSMutableDictionary dictionary];
   for (int d = 0; d < *num_detections; d++)
   {
@@ -538,7 +646,11 @@ void softmax(float vals[], int count) {
 
 NSMutableArray* parseYOLO(int num_classes, const NSArray* anchors, int block_size, int num_boxes_per_bolock,
                           int num_results_per_class, float threshold, int input_size) {
+#ifdef TFLITE2
+  float* output = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+#else
   float* output = interpreter->typed_output_tensor<float>(0);
+#endif
   NSMutableArray* results = [NSMutableArray array];
   std::priority_queue<std::pair<float, NSMutableDictionary*>, std::vector<std::pair<float, NSMutableDictionary*>>,
   std::less<std::pair<float, NSMutableDictionary*>>> top_result_pq;
@@ -653,7 +765,7 @@ void detectObjectOnImage(NSDictionary* args, FlutterResult result) {
     if ([model isEqual: @"SSDMobileNet"])
       return result(parseSSDMobileNet(threshold, num_results_per_class));
     else
-      return result(parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
+      return result(parseYOLO((int)labels.size(), anchors, block_size, num_boxes_per_block, num_results_per_class,
                               threshold, input_size));
   });
 }
@@ -726,7 +838,7 @@ void detectObjectOnFrame(NSDictionary* args, FlutterResult result) {
     if ([model isEqual: @"SSDMobileNet"])
       return result(parseSSDMobileNet(threshold, num_results_per_class));
     else
-      return result(parseYOLO((int)(labels.size() - 1), anchors, block_size, num_boxes_per_block, num_results_per_class,
+      return result(parseYOLO((int)labels.size(), anchors, block_size, num_boxes_per_block, num_results_per_class,
                               threshold, input_size));
   });
 }
@@ -837,8 +949,12 @@ void setPixel(char* rgba, int index, long color) {
 }
 
 NSData* fetchArgmax(const NSArray* labelColors, const NSString* outputType) {
+#ifdef TFLITE2
+  const TfLiteTensor* output_tensor = TfLiteInterpreterGetOutputTensor(interpreter, 0);
+#else
   int output = interpreter->outputs()[0];
   TfLiteTensor* output_tensor = interpreter->tensor(output);
+#endif
   const int height = output_tensor->dims->data[1];
   const int width = output_tensor->dims->data[2];
   const int channels = output_tensor->dims->data[3];
@@ -848,7 +964,11 @@ NSData* fetchArgmax(const NSArray* labelColors, const NSString* outputType) {
   data = [[NSMutableData dataWithCapacity: size] initWithLength: size];
   char* out = (char*)[data bytes];
   if (output_tensor->type == kTfLiteUInt8) {
+#ifdef TFLITE2
+    const uint8_t* bytes = output_tensor->data.uint8;
+#else
     const uint8_t* bytes = interpreter->typed_tensor<uint8_t>(output);
+#endif
     for (int i = 0; i < height; ++i) {
       for (int j = 0; j < width; ++j) {
         int index = i * width + j;
@@ -866,7 +986,11 @@ NSData* fetchArgmax(const NSArray* labelColors, const NSString* outputType) {
       }
     }
   } else { // kTfLiteFloat32
+#ifdef TFLITE2
+    const float* bytes = output_tensor->data.f;
+#else
     const float* bytes = interpreter->typed_tensor<float>(output);
+#endif
     for (int i = 0; i < height; ++i) {
       for (int j = 0; j < width; ++j) {
         int index = i * width + j;
@@ -1198,18 +1322,29 @@ NSMutableDictionary* traverseToTargetKeypoint(int edge_id,
 
 NSMutableArray* parsePoseNet(int num_results, float threshold, int nms_radius, int input_size) {
   initPoseNet();
-  
+
+#ifdef TFLITE2
+  assert(TfLiteInterpreterGetOutputTensorCount(interpreter) == 4);
+  const TfLiteTensor* scores_tensor = TfLiteInterpreterGetOutputTensor(interpreter, 0);
+#else
   assert(interpreter->outputs().size() == 4);
   TfLiteTensor* scores_tensor = interpreter->tensor(interpreter->outputs()[0]);
+#endif
   height = scores_tensor->dims->data[1];
   width = scores_tensor->dims->data[2];
   num_keypoints = scores_tensor->dims->data[3];
-  
+
+#ifdef TFLITE2
+  float* scores = TfLiteInterpreterGetOutputTensor(interpreter, 0)->data.f;
+  float* offsets = TfLiteInterpreterGetOutputTensor(interpreter, 1)->data.f;
+  float* displacements_fwd = TfLiteInterpreterGetOutputTensor(interpreter, 2)->data.f;
+  float* displacements_bwd = TfLiteInterpreterGetOutputTensor(interpreter, 3)->data.f;
+#else
   float* scores = interpreter->typed_output_tensor<float>(0);
   float* offsets = interpreter->typed_output_tensor<float>(1);
   float* displacements_fwd = interpreter->typed_output_tensor<float>(2);
   float* displacements_bwd = interpreter->typed_output_tensor<float>(3);
-  
+#endif
   PriorityQueue pq = buildPartWithScoreQueue(scores, threshold, local_maximum_radius);
   
   int num_edges = (int)[parent_to_child_edges count];
@@ -1351,8 +1486,15 @@ void runPoseNetOnFrame(NSDictionary* args, FlutterResult result) {
 }
 
 void close() {
+#ifdef TFLITE2
+  interpreter = nullptr;
+  if (delegate != nullptr)
+    TFLGpuDelegateDelete(delegate);
+  delegate = nullptr;
+#else
   interpreter.release();
   interpreter = NULL;
+#endif
   model = NULL;
   labels.clear();
 }

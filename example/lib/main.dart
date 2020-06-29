@@ -92,7 +92,7 @@ class _MyAppState extends State<MyApp> {
 
     loadModel().then((val) {
       setState(() {
-        _busy = false; 
+        _busy = false;
       });
     });
   }
@@ -106,26 +106,34 @@ class _MyAppState extends State<MyApp> {
           res = await Tflite.loadModel(
             model: "assets/yolov2_tiny.tflite",
             labels: "assets/yolov2_tiny.txt",
+            // useGpuDelegate: true,
           );
           break;
         case ssd:
           res = await Tflite.loadModel(
-              model: "assets/ssd_mobilenet.tflite",
-              labels: "assets/ssd_mobilenet.txt");
+            model: "assets/ssd_mobilenet.tflite",
+            labels: "assets/ssd_mobilenet.txt",
+            // useGpuDelegate: true,
+          );
           break;
         case deeplab:
           res = await Tflite.loadModel(
-              model: "assets/deeplabv3_257_mv_gpu.tflite",
-              labels: "assets/deeplabv3_257_mv_gpu.txt");
+            model: "assets/deeplabv3_257_mv_gpu.tflite",
+            labels: "assets/deeplabv3_257_mv_gpu.txt",
+            // useGpuDelegate: true,
+          );
           break;
         case posenet:
           res = await Tflite.loadModel(
-              model: "assets/posenet_mv1_075_float_from_checkpoints.tflite");
+            model: "assets/posenet_mv1_075_float_from_checkpoints.tflite",
+            // useGpuDelegate: true,
+          );
           break;
         default:
           res = await Tflite.loadModel(
             model: "assets/mobilenet_v1_1.0_224.tflite",
             labels: "assets/mobilenet_v1_1.0_224.txt",
+            // useGpuDelegate: true,
           );
       }
       print(res);
@@ -166,6 +174,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future recognizeImage(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var recognitions = await Tflite.runModelOnImage(
       path: image.path,
       numResults: 6,
@@ -176,9 +185,12 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}ms");
   }
 
   Future recognizeImageBinary(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var imageBytes = (await rootBundle.load(image.path)).buffer;
     img.Image oriImage = img.decodeJpg(imageBytes.asUint8List());
     img.Image resizedImage = img.copyResize(oriImage, height: 224, width: 224);
@@ -190,9 +202,12 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}ms");
   }
 
   Future yolov2Tiny(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var recognitions = await Tflite.detectObjectOnImage(
       path: image.path,
       model: "YOLO",
@@ -213,9 +228,12 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}ms");
   }
 
   Future ssdMobileNet(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var recognitions = await Tflite.detectObjectOnImage(
       path: image.path,
       numResultsPerClass: 1,
@@ -230,9 +248,12 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}ms");
   }
 
   Future segmentMobileNet(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var recognitions = await Tflite.runSegmentationOnImage(
       path: image.path,
       imageMean: 127.5,
@@ -242,9 +263,12 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}");
   }
 
   Future poseNet(File image) async {
+    int startTime = new DateTime.now().millisecondsSinceEpoch;
     var recognitions = await Tflite.runPoseNetOnImage(
       path: image.path,
       numResults: 2,
@@ -255,6 +279,8 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _recognitions = recognitions;
     });
+    int endTime = new DateTime.now().millisecondsSinceEpoch;
+    print("Inference took ${endTime - startTime}ms");
   }
 
   onSelect(model) async {

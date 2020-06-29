@@ -1,3 +1,9 @@
+## 1.1.0
+
+- Upgrade to TensorFlowLiteObjC 2.2.
+- Add support for GPU delegate. 
+- Fix label size for YOLO. 
+
 ## 1.0.6
 
 * Add support for resources outside packaged assets.

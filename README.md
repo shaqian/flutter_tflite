@@ -17,7 +17,13 @@ A Flutter plugin for accessing TensorFlow Lite API. Supports image classificatio
     - [Prediction in Static Images](#Prediction-in-Static-Images)
     - [Real-time Detection](#Real-time-Detection)
 
-### Breaking changes since 1.0.0:
+### Breaking changes
+
+#### Since 1.1.0:
+
+1. iOS TensorFlow Lite library is upgraded from TensorFlowLite　1.x to TensorFlowLiteObjC　2.x. Changes to native code are denoted with `TFLITE2`.
+
+#### Since 1.0.0:
 
 1. Updated to TensorFlow Lite API v1.12.0.
 2. No longer accepts parameter `inputSize` and `numChannels`. They will be retrieved from input tensor.
@@ -78,7 +84,8 @@ String res = await Tflite.loadModel(
   model: "assets/mobilenet_v1_1.0_224.tflite",
   labels: "assets/labels.txt",
   numThreads: 1, // defaults to 1
-  isAsset: true // defaults to true, set to false to load resources outside assets
+  isAsset: true, // defaults to true, set to false to load resources outside assets
+  useGpuDelegate: false // defaults to false, set to true to use GPU delegate
 );
 ```
 
@@ -89,6 +96,10 @@ String res = await Tflite.loadModel(
 ```
 await Tflite.close();
 ```
+
+### GPU Delegate
+
+When using GPU delegate, refer to [this step](https://www.tensorflow.org/lite/performance/gpu#step_5_release_mode) for release mode setting to get better performance. 
 
 ### Image Classification
 
