@@ -1,6 +1,6 @@
 name: tflite
 description: A Flutter plugin for accessing TensorFlow Lite. Supports both iOS and Android.
-version: 1.1.0
+version: 1.1.1
 homepage: https://github.com/shaqian/flutter_tflite
 
 environment:

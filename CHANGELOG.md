@@ -1,3 +1,7 @@
+## 1.1.1
+
+- Fix error: ';' expected on Android
+
 ## 1.1.0
 
 - Upgrade to TensorFlowLiteObjC 2.2.
