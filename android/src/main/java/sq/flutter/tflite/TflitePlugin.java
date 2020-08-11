@@ -5,7 +5,10 @@ import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.SystemClock;
@@ -338,25 +341,42 @@ public class TflitePlugin implements MethodCallHandler {
           inputSize, inputSize, false);
       bitmap = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888);
       final Canvas canvas = new Canvas(bitmap);
-      canvas.drawBitmap(bitmapRaw, matrix, null);
+      if (inputChannels == 1){
+        Paint paint = new Paint();
+        ColorMatrix cm = new ColorMatrix();
+        cm.setSaturation(0);
+        ColorMatrixColorFilter f = new ColorMatrixColorFilter(cm);
+        paint.setColorFilter(f);
+        canvas.drawBitmap(bitmapRaw, matrix, paint);
+      } else {
+        canvas.drawBitmap(bitmapRaw, matrix, null);
+      }
     }
 
     if (tensor.dataType() == DataType.FLOAT32) {
       for (int i = 0; i < inputSize; ++i) {
         for (int j = 0; j < inputSize; ++j) {
           int pixelValue = bitmap.getPixel(j, i);
-          imgData.putFloat((((pixelValue >> 16) & 0xFF) - mean) / std);
-          imgData.putFloat((((pixelValue >> 8) & 0xFF) - mean) / std);
-          imgData.putFloat(((pixelValue & 0xFF) - mean) / std);
+          if (inputChannels > 1){
+            imgData.putFloat((((pixelValue >> 16) & 0xFF) - mean) / std);
+            imgData.putFloat((((pixelValue >> 8) & 0xFF) - mean) / std);
+            imgData.putFloat(((pixelValue & 0xFF) - mean) / std);
+          } else {
+            imgData.putFloat((((pixelValue >> 16 | pixelValue >> 8 | pixelValue) & 0xFF) - mean) / std);
+          }
         }
       }
     } else {
       for (int i = 0; i < inputSize; ++i) {
         for (int j = 0; j < inputSize; ++j) {
           int pixelValue = bitmap.getPixel(j, i);
-          imgData.put((byte) ((pixelValue >> 16) & 0xFF));
-          imgData.put((byte) ((pixelValue >> 8) & 0xFF));
-          imgData.put((byte) (pixelValue & 0xFF));
+          if (inputChannels > 1){
+            imgData.put((byte) ((pixelValue >> 16) & 0xFF));
+            imgData.put((byte) ((pixelValue >> 8) & 0xFF));
+            imgData.put((byte) (pixelValue & 0xFF));
+          } else {
+            imgData.put((byte) ((pixelValue >> 16 | pixelValue >> 8 | pixelValue) & 0xFF));
+          }
         }
       }
     }
