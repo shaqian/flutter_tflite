@@ -1,4 +1,4 @@
-//#define CONTRIB_PATH
+#define CONTRIB_PATH
 #define TFLITE2
 
 #import "TflitePlugin.h"
