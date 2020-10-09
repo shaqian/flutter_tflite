@@ -67,7 +67,7 @@ class Tflite {
       int imageWidth = 720,
       double imageMean = 127.5,
       double imageStd = 127.5,
-      int rotation: 90, // Android only
+      int rotation = 90, // Android only
       int numResults = 5,
       double threshold = 0.1,
       bool asynch = true}) async {

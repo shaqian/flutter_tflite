@@ -507,3 +507,7 @@ var result = await runPoseNetOnFrame(
 ### Real-time detection
 
   Refer to [flutter_realtime_Detection](https://github.com/shaqian/flutter_realtime_detection).
+
+## Run test cases
+
+`flutter test test/tflite_test.dart`
