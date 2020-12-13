@@ -42,7 +42,10 @@ In `android/app/build.gradle`, add the following setting in `android` block.
         noCompress 'tflite'
         noCompress 'lite'
     }
-```
+``` 
+
+and in the same file, change the `minSdkVersion` to 19 or above.
+
 
 ### iOS
 
