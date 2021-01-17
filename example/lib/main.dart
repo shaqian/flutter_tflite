@@ -69,9 +69,7 @@ class _MyAppState extends State<MyApp> {
       // await recognizeImageBinary(image);
     }
 
-    new FileImage(image)
-        .resolve(new ImageConfiguration())
-        .addListener(ImageStreamListener((ImageInfo info, bool _) {
+    new FileImage(image).resolve(new ImageConfiguration()).addListener(ImageStreamListener((ImageInfo info, bool _) {
       setState(() {
         _imageHeight = info.image.height.toDouble();
         _imageWidth = info.image.width.toDouble();
@@ -137,13 +135,12 @@ class _MyAppState extends State<MyApp> {
           );
       }
       print(res);
-    } on PlatformException {
-      print('Failed to load model.');
+    } on PlatformException catch (err) {
+      print('Failed to load model. :$err');
     }
   }
 
-  Uint8List imageToByteListFloat32(
-      img.Image image, int inputSize, double mean, double std) {
+  Uint8List imageToByteListFloat32(img.Image image, int inputSize, double mean, double std) {
     var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
     var buffer = Float32List.view(convertedBytes.buffer);
     int pixelIndex = 0;
@@ -342,8 +339,7 @@ class _MyAppState extends State<MyApp> {
 
     var lists = <Widget>[];
     _recognitions.forEach((re) {
-      var color = Color((Random().nextDouble() * 0xFFFFFF).toInt() << 0)
-          .withOpacity(1.0);
+      var color = Color((Random().nextDouble() * 0xFFFFFF).toInt() << 0).withOpacity(1.0);
       var list = re["keypoints"].values.map<Widget>((k) {
         return Positioned(
           left: k["x"] * factorX - 6,
@@ -380,10 +376,7 @@ class _MyAppState extends State<MyApp> {
             ? Text('No image selected.')
             : Container(
                 decoration: BoxDecoration(
-                    image: DecorationImage(
-                        alignment: Alignment.topCenter,
-                        image: MemoryImage(_recognitions),
-                        fit: BoxFit.fill)),
+                    image: DecorationImage(alignment: Alignment.topCenter, image: MemoryImage(_recognitions), fit: BoxFit.fill)),
                 child: Opacity(opacity: 0.3, child: Image.file(_image))),
       ));
     } else {
