@@ -221,7 +221,10 @@ public class TflitePlugin implements MethodCallHandler {
     }
 
     int numThreads = (int) args.get("numThreads");
-    boolean useGpuDelegate = (boolean) args.getOrDefault("useGpuDelegate", false);
+    Boolean useGpuDelegate = (Boolean) args.get("useGpuDelegate");
+    if (useGpuDelegate == null) {
+      useGpuDelegate = false;
+    }
 
     final Interpreter.Options tfliteOptions = new Interpreter.Options();
     tfliteOptions.setNumThreads(numThreads);
@@ -989,7 +992,7 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private class RunSegmentationOnImage extends TfliteTask {
-    List<Long> labelColors;
+    List<Number> labelColors;
     String outputType;
     long startTime;
     ByteBuffer input, output;
@@ -1034,7 +1037,7 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private class RunSegmentationOnBinary extends TfliteTask {
-    List<Long> labelColors;
+    List<Number> labelColors;
     String outputType;
     long startTime;
     ByteBuffer input, output;
@@ -1074,7 +1077,7 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
   private class RunSegmentationOnFrame extends TfliteTask {
-    List<Long> labelColors;
+    List<Number> labelColors;
     String outputType;
     long startTime;
     ByteBuffer input, output;
@@ -1121,7 +1124,7 @@ public class TflitePlugin implements MethodCallHandler {
   }
 
 
-  byte[] fetchArgmax(ByteBuffer output, List<Long> labelColors, String outputType) {
+  byte[] fetchArgmax(ByteBuffer output, List<Number> labelColors, String outputType) {
     Tensor outputTensor = tfLite.getOutputTensor(0);
     int outputBatchSize = outputTensor.shape()[0];
     assert outputBatchSize == 1;
