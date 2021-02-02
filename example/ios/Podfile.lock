@@ -3,9 +3,16 @@ PODS:
   - image_picker (0.0.1):
     - Flutter
   - TensorFlowLiteC (2.2.0)
-  - tflite (1.1.2):
+  - TensorFlowLiteC/Core (2.4.0)
+  - TensorFlowLiteC/CoreML (2.4.0):
+    - TensorFlowLiteC/Core
+  - TensorFlowLiteC/Metal (2.4.0):
+    - TensorFlowLiteC/Core
+  - tflite (1.1.1):
     - Flutter
-    - TensorFlowLiteC
+    - TensorFlowLiteC/Core
+    - TensorFlowLiteC/CoreML
+    - TensorFlowLiteC/Metal
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
@@ -27,8 +34,8 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: 434fef37c0980e73bb6479ef766c45957d4b510c
   image_picker: a211f28b95a560433c00f5cd3773f4710a20404d
-  TensorFlowLiteC: b3ab9e867b0b71052ca102a32a786555b330b02e
-  tflite: f0403a894740019d63ab5662253bba5b2dd37296
+  TensorFlowLiteC: 09f8ac75a76caeadb19bcfa694e97454cc1ecf87
+  tflite: d701e08676abd255d3340a79bb8cb4ba1594723c
 
 PODFILE CHECKSUM: 8e679eca47255a8ca8067c4c67aab20e64cb974d
 

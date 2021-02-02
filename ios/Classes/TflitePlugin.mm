@@ -19,6 +19,7 @@
 #elif defined TFLITE2
 #import "TensorFlowLiteC.h"
 #import "metal_delegate.h"
+#import "coreml_delegate.h"
 #else
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -118,6 +119,7 @@ std::vector<std::string> labels;
 TfLiteInterpreter *interpreter = nullptr;
 TfLiteModel *model = nullptr;
 TfLiteDelegate *delegate = nullptr;
+bool isCoreMLDelegate = false;
 #else
 std::unique_ptr<tflite::FlatBufferModel> model;
 std::unique_ptr<tflite::Interpreter> interpreter;
@@ -160,10 +162,19 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   }
   options = TfLiteInterpreterOptionsCreate();
   TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
-  
+
   bool useGpuDelegate = [args[@"useGpuDelegate"] boolValue];
-  if (useGpuDelegate) {
+  bool useCoreMLDelegate = [args[@"useCoreMLDelegate"] boolValue];
+  if (useCoreMLDelegate) {
+    delegate = TfLiteCoreMlDelegateCreate(nullptr);
+    if (delegate != NULL) {
+      isCoreMLDelegate = true;
+    }
+  }
+  if (delegate == NULL && useGpuDelegate) {
     delegate = TFLGpuDelegateCreate(nullptr);
+  }
+  if (delegate != NULL) {
     TfLiteInterpreterOptionsAddDelegate(options, delegate);
   }
 #else
@@ -1488,8 +1499,11 @@ void runPoseNetOnFrame(NSDictionary* args, FlutterResult result) {
 void close() {
 #ifdef TFLITE2
   interpreter = nullptr;
-  if (delegate != nullptr)
+  if (isCoreMLDelegate && delegate != nullptr) {
+    TfLiteCoreMlDelegateDelete(delegate);
+  } else if (delegate != nullptr) {
     TFLGpuDelegateDelete(delegate);
+  }
   delegate = nullptr;
 #else
   interpreter.release();

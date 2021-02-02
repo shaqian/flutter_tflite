@@ -86,6 +86,7 @@ String res = await Tflite.loadModel(
   numThreads: 1, // defaults to 1
   isAsset: true, // defaults to true, set to false to load resources outside assets
   useGpuDelegate: false // defaults to false, set to true to use GPU delegate
+  useCoreMLDelegate: false // defaults to false, set to true to use CoreML delegate on iOS devices - has no effect on Android
 );
 ```
 
