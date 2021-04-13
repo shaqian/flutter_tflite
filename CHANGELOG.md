@@ -1,3 +1,7 @@
+## 1.1.2
+
+- Add null safety support for Android
+
 ## 1.1.1
 
 - Fix error: ';' expected on Android
