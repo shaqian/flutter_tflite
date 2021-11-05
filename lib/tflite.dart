@@ -1,36 +1,26 @@
 import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:ui' show Color;
-import 'package:flutter/services.dart';
 
 class Tflite {
-  static const MethodChannel _channel = const MethodChannel('tflite');
+  static const MethodChannel _channel = MethodChannel('tflite');
 
-  static Future<String?> loadModel(
-      {required String model,
-      String labels = "",
-      int numThreads = 1,
-      bool isAsset = true,
-      bool useGpuDelegate = false}) async {
+  static Future<String?> get platformVersion async {
+    final String? version = await _channel.invokeMethod('getPlatformVersion');
+    return version;
+  }
+
+  static Future<String?> loadModel({required String model, String labels = "", int numThreads = 1, bool isAsset = true, bool useGpuDelegate = false}) async {
     return await _channel.invokeMethod(
       'loadModel',
-      {
-        "model": model,
-        "labels": labels,
-        "numThreads": numThreads,
-        "isAsset": isAsset,
-        'useGpuDelegate': useGpuDelegate
-      },
+      {"model": model, "labels": labels, "numThreads": numThreads, "isAsset": isAsset, 'useGpuDelegate': useGpuDelegate},
     );
   }
 
   static Future<List?> runModelOnImage(
-      {required String path,
-      double imageMean = 117.0,
-      double imageStd = 1.0,
-      int numResults = 5,
-      double threshold = 0.1,
-      bool asynch = true}) async {
+      {required String path, double imageMean = 117.0, double imageStd = 1.0, int numResults = 5, double threshold = 0.1, bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnImage',
       {
@@ -44,11 +34,7 @@ class Tflite {
     );
   }
 
-  static Future<List?> runModelOnBinary(
-      {required Uint8List binary,
-      int numResults = 5,
-      double threshold = 0.1,
-      bool asynch = true}) async {
+  static Future<List?> runModelOnBinary({required Uint8List binary, int numResults = 5, double threshold = 0.1, bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runModelOnBinary',
       {
@@ -86,18 +72,7 @@ class Tflite {
     );
   }
 
-  static const anchors = [
-    0.57273,
-    0.677385,
-    1.87446,
-    2.06253,
-    3.33843,
-    5.47434,
-    7.88282,
-    3.52778,
-    9.77052,
-    9.16828
-  ];
+  static const anchors = [0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828];
 
   static Future<List?> detectObjectOnImage({
     required String path,
@@ -164,7 +139,7 @@ class Tflite {
     double imageStd = 127.5,
     double threshold = 0.1,
     int numResultsPerClass = 5,
-    int rotation: 90, // Android only
+    int rotation = 90, // Android only
     // Used in YOLO only
     List anchors = anchors,
     int blockSize = 32,
@@ -196,11 +171,7 @@ class Tflite {
   }
 
   static Future<Uint8List?> runPix2PixOnImage(
-      {required String path,
-      double imageMean = 0,
-      double imageStd = 255.0,
-      String outputType = "png",
-      bool asynch = true}) async {
+      {required String path, double imageMean = 0, double imageStd = 255.0, String outputType = "png", bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnImage',
       {
@@ -213,10 +184,7 @@ class Tflite {
     );
   }
 
-  static Future<Uint8List?> runPix2PixOnBinary(
-      {required Uint8List binary,
-      String outputType = "png",
-      bool asynch = true}) async {
+  static Future<Uint8List?> runPix2PixOnBinary({required Uint8List binary, String outputType = "png", bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPix2PixOnBinary',
       {
@@ -233,7 +201,7 @@ class Tflite {
     int imageWidth = 720,
     double imageMean = 0,
     double imageStd = 255.0,
-    int rotation: 90, // Android only
+    int rotation = 90, // Android only
     String outputType = "png",
     bool asynch = true,
   }) async {
@@ -254,36 +222,31 @@ class Tflite {
 
   // https://github.com/meetshah1995/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py
   static List<int> pascalVOCLabelColors = [
-    Color.fromARGB(255, 0, 0, 0).value, // background
-    Color.fromARGB(255, 128, 0, 0).value, // aeroplane
-    Color.fromARGB(255, 0, 128, 0).value, // biyclce
-    Color.fromARGB(255, 128, 128, 0).value, // bird
-    Color.fromARGB(255, 0, 0, 128).value, // boat
-    Color.fromARGB(255, 128, 0, 128).value, // bottle
-    Color.fromARGB(255, 0, 128, 128).value, // bus
-    Color.fromARGB(255, 128, 128, 128).value, // car
-    Color.fromARGB(255, 64, 0, 0).value, // cat
-    Color.fromARGB(255, 192, 0, 0).value, // chair
-    Color.fromARGB(255, 64, 128, 0).value, // cow
-    Color.fromARGB(255, 192, 128, 0).value, // diningtable
-    Color.fromARGB(255, 64, 0, 128).value, // dog
-    Color.fromARGB(255, 192, 0, 128).value, // horse
-    Color.fromARGB(255, 64, 128, 128).value, // motorbike
-    Color.fromARGB(255, 192, 128, 128).value, // person
-    Color.fromARGB(255, 0, 64, 0).value, // potted plant
-    Color.fromARGB(255, 128, 64, 0).value, // sheep
-    Color.fromARGB(255, 0, 192, 0).value, // sofa
-    Color.fromARGB(255, 128, 192, 0).value, // train
-    Color.fromARGB(255, 0, 64, 128).value, // tv-monitor
+    const Color.fromARGB(255, 0, 0, 0).value, // background
+    const Color.fromARGB(255, 128, 0, 0).value, // aeroplane
+    const Color.fromARGB(255, 0, 128, 0).value, // biyclce
+    const Color.fromARGB(255, 128, 128, 0).value, // bird
+    const Color.fromARGB(255, 0, 0, 128).value, // boat
+    const Color.fromARGB(255, 128, 0, 128).value, // bottle
+    const Color.fromARGB(255, 0, 128, 128).value, // bus
+    const Color.fromARGB(255, 128, 128, 128).value, // car
+    const Color.fromARGB(255, 64, 0, 0).value, // cat
+    const Color.fromARGB(255, 192, 0, 0).value, // chair
+    const Color.fromARGB(255, 64, 128, 0).value, // cow
+    const Color.fromARGB(255, 192, 128, 0).value, // diningtable
+    const Color.fromARGB(255, 64, 0, 128).value, // dog
+    const Color.fromARGB(255, 192, 0, 128).value, // horse
+    const Color.fromARGB(255, 64, 128, 128).value, // motorbike
+    const Color.fromARGB(255, 192, 128, 128).value, // person
+    const Color.fromARGB(255, 0, 64, 0).value, // potted plant
+    const Color.fromARGB(255, 128, 64, 0).value, // sheep
+    const Color.fromARGB(255, 0, 192, 0).value, // sofa
+    const Color.fromARGB(255, 128, 192, 0).value, // train
+    const Color.fromARGB(255, 0, 64, 128).value, // tv-monitor
   ];
 
   static Future<Uint8List?> runSegmentationOnImage(
-      {required String path,
-      double imageMean = 0,
-      double imageStd = 255.0,
-      List<int>? labelColors,
-      String outputType = "png",
-      bool asynch = true}) async {
+      {required String path, double imageMean = 0, double imageStd = 255.0, List<int>? labelColors, String outputType = "png", bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnImage',
       {
@@ -297,11 +260,7 @@ class Tflite {
     );
   }
 
-  static Future<Uint8List?> runSegmentationOnBinary(
-      {required Uint8List binary,
-      List<int>? labelColors,
-      String outputType = "png",
-      bool asynch = true}) async {
+  static Future<Uint8List?> runSegmentationOnBinary({required Uint8List binary, List<int>? labelColors, String outputType = "png", bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runSegmentationOnBinary',
       {
@@ -319,7 +278,7 @@ class Tflite {
       int imageWidth = 720,
       double imageMean = 0,
       double imageStd = 255.0,
-      int rotation: 90, // Android only
+      int rotation = 90, // Android only
       List<int>? labelColors,
       String outputType = "png",
       bool asynch = true}) async {
@@ -362,11 +321,7 @@ class Tflite {
   }
 
   static Future<List?> runPoseNetOnBinary(
-      {required Uint8List binary,
-      int numResults = 5,
-      double threshold = 0.5,
-      int nmsRadius = 20,
-      bool asynch = true}) async {
+      {required Uint8List binary, int numResults = 5, double threshold = 0.5, int nmsRadius = 20, bool asynch = true}) async {
     return await _channel.invokeMethod(
       'runPoseNetOnBinary',
       {
@@ -385,7 +340,7 @@ class Tflite {
       int imageWidth = 720,
       double imageMean = 127.5,
       double imageStd = 127.5,
-      int rotation: 90, // Android only
+      int rotation = 90, // Android only
       int numResults = 5,
       double threshold = 0.5,
       int nmsRadius = 20,

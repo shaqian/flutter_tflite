@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -41,11 +41,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need your permission to access photo gallery</string>
-	<key>NSCameraUsageDescription</key>
-	<string>We need your permission to use phone camera</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>We need your permission to use microsphone</string>
 </dict>
 </plist>
