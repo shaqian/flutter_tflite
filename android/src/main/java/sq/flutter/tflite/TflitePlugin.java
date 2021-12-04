@@ -96,7 +96,7 @@ public class TflitePlugin implements FlutterPlugin, MethodCallHandler, ActivityA
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "ddd");
+    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "tflite");
     channel.setMethodCallHandler(this);
   }
 
