@@ -1,5 +1,6 @@
 package sq.flutter.tflite;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
@@ -19,11 +20,20 @@ import android.renderscript.ScriptIntrinsicYuvToRGB;
 import android.renderscript.Type;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
+import io.flutter.FlutterInjector;
+import io.flutter.embedding.android.FlutterActivity;
+import io.flutter.embedding.engine.loader.FlutterLoader;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
+import io.flutter.plugin.common.PluginRegistry;
 
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
@@ -52,8 +62,8 @@ import java.util.PriorityQueue;
 import java.util.Vector;
 
 
-public class TflitePlugin implements MethodCallHandler {
-  private final Registrar mRegistrar;
+public class TflitePlugin implements FlutterPlugin, MethodCallHandler, ActivityAware {
+  private Activity activity;
   private Interpreter tfLite;
   private boolean tfLiteBusy = false;
   private int inputSize = 0;
@@ -82,17 +92,41 @@ public class TflitePlugin implements MethodCallHandler {
   List<Integer> parentToChildEdges = new ArrayList<>();
   List<Integer> childToParentEdges = new ArrayList<>();
 
-  public static void registerWith(Registrar registrar) {
-    final MethodChannel channel = new MethodChannel(registrar.messenger(), "tflite");
-    channel.setMethodCallHandler(new TflitePlugin(registrar));
-  }
+  private MethodChannel channel;
 
-  private TflitePlugin(Registrar registrar) {
-    this.mRegistrar = registrar;
+  @Override
+  public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
+    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "tflite");
+    channel.setMethodCallHandler(this);
   }
 
   @Override
-  public void onMethodCall(MethodCall call, Result result) {
+  public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    activity = binding.getActivity();
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    activity = null;
+  }
+
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+    this.onDetachedFromActivity();
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    this.onAttachedToActivity(binding);
+  }
+
+  @Override
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    channel.setMethodCallHandler(null);
+  }
+
+  @Override
+  public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
     if (call.method.equals("loadModel")) {
       try {
         String res = loadModel((HashMap) call.arguments);
@@ -205,8 +239,9 @@ public class TflitePlugin implements MethodCallHandler {
     String key = null;
     AssetManager assetManager = null;
     if (isAsset) {
-      assetManager = mRegistrar.context().getAssets();
-      key = mRegistrar.lookupKeyForAsset(model);
+      assetManager = activity.getApplicationContext().getAssets();
+      FlutterLoader loader = FlutterInjector.instance().flutterLoader();
+      key = loader.getLookupKeyForAsset(model);
       AssetFileDescriptor fileDescriptor = assetManager.openFd(key);
       FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
       FileChannel fileChannel = inputStream.getChannel();
@@ -238,7 +273,8 @@ public class TflitePlugin implements MethodCallHandler {
 
     if (labels.length() > 0) {
       if (isAsset) {
-        key = mRegistrar.lookupKeyForAsset(labels);
+        FlutterLoader loader = FlutterInjector.instance().flutterLoader();
+        key = loader.getLookupKeyForAsset(labels);
         loadLabels(assetManager, key);
       } else {
         loadLabels(null, labels);
@@ -411,7 +447,7 @@ public class TflitePlugin implements MethodCallHandler {
 
     Bitmap bitmapRaw = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888);
     Allocation bmData = renderScriptNV21ToRGBA888(
-        mRegistrar.context(),
+        activity.getApplicationContext(),
         imageWidth,
         imageHeight,
         data);
