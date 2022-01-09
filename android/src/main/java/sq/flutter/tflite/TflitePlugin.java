@@ -662,10 +662,39 @@ public class TflitePlugin implements MethodCallHandler {
       this.outputScores = new float[1][num];
       this.inputArray = new Object[]{imgData};
 
-      outputMap.put(0, outputLocations);
-      outputMap.put(1, outputClasses);
-      outputMap.put(2, outputScores);
-      outputMap.put(3, numDetections);
+      //In previous versions of TensorFlow, the expected order is:
+      //outputMap [0] -> StatefulPartitionedCall:3 -> outputLocations
+      //outputMap [1] -> StatefulPartitionedCall:2 -> outputClasses
+      //outputMap [2] -> StatefulPartitionedCall:1 -> outputScores
+      //outputMap [3] -> StatefulPartitionedCall:0 -> numDetections
+
+      //However -> there's a breaking change with Tensorflow 2.7.0 such that the 
+      //StatefulPartitionedCall elements get returned in random order during TFLite conversion
+      //See https://github.com/tensorflow/tensorflow/issues/33303
+      //To fix this, we have to iterate through the tfLiteObjectRecognition.getOutputTensor elements and remap them
+
+      for(int outputMapLocationIterator = 0; outputMapLocationIterator <= 3; outputMapLocationIterator++){
+        String thisTensorName = tfLiteObjectRecognition.getOutputTensor(outputMapLocationIterator).name();
+        switch (thisTensorName) {
+          case "StatefulPartitionedCall:3": {
+            outputMap.put(outputMapLocationIterator, outputLocations);
+            break;
+          }
+          case "StatefulPartitionedCall:2": {
+            outputMap.put(outputMapLocationIterator, outputClasses);
+            break;
+          }
+          case "StatefulPartitionedCall:1": {
+            outputMap.put(outputMapLocationIterator, outputScores);
+            break;
+          }
+          case "StatefulPartitionedCall:0": {
+            outputMap.put(outputMapLocationIterator, numDetections);
+            break;
+          }
+        }
+
+      }
 
       startTime = SystemClock.uptimeMillis();
     }
