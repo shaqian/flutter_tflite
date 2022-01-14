@@ -27,7 +27,7 @@
 #include "tensorflow/lite/op_resolver.h"
 #endif
 
-#include "ios_image_load.h"
+#include "ios_image_load.hh"
 
 #define LOG(x) std::cerr
 
@@ -155,26 +155,28 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   const int num_threads = [args[@"numThreads"] intValue];
   
 #ifdef TFLITE2
-  TfLiteInterpreterOptions *options = nullptr;
   model = TfLiteModelCreateFromFile(graph_path.UTF8String);
   if (!model) {
     return [NSString stringWithFormat:@"%s %@", "Failed to mmap model", graph_path];
   }
-  options = TfLiteInterpreterOptionsCreate();
-  TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
 
   bool useGpuDelegate = [args[@"useGpuDelegate"] boolValue];
   bool useCoreMLDelegate = [args[@"useCoreMLDelegate"] boolValue];
   if (useCoreMLDelegate) {
-    delegate = TfLiteCoreMlDelegateCreate(nullptr);
-    if (delegate != NULL) {
+    TfLiteCoreMlDelegateOptions options = {};
+    options.enabled_devices = TfLiteCoreMlDelegateAllDevices;
+    options.coreml_version = 3;
+    delegate = TfLiteCoreMlDelegateCreate(&options);
+    if (delegate) {
       isCoreMLDelegate = true;
     }
   }
-  if (delegate == NULL && useGpuDelegate) {
-    delegate = TFLGpuDelegateCreate(nullptr);
+  TfLiteInterpreterOptions *options = TfLiteInterpreterOptionsCreate();
+  if (!delegate && useGpuDelegate) {
+    TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
+    delegate = TFLGpuDelegateCreate(NULL);
   }
-  if (delegate != NULL) {
+  if (!delegate) {
     TfLiteInterpreterOptionsAddDelegate(options, delegate);
   }
 #else
@@ -1498,6 +1500,7 @@ void runPoseNetOnFrame(NSDictionary* args, FlutterResult result) {
 
 void close() {
 #ifdef TFLITE2
+  TfLiteInterpreterDelete(interpreter);
   interpreter = nullptr;
   if (isCoreMLDelegate && delegate != nullptr) {
     TfLiteCoreMlDelegateDelete(delegate);
@@ -1505,6 +1508,7 @@ void close() {
     TFLGpuDelegateDelete(delegate);
   }
   delegate = nullptr;
+  TfLiteModelDelete(model);
 #else
   interpreter.release();
   interpreter = NULL;
