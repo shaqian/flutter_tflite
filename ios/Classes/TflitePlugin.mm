@@ -19,6 +19,7 @@
 #elif defined TFLITE2
 #import "TensorFlowLiteC.h"
 #import "metal_delegate.h"
+#import "coreml_delegate.h"
 #else
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -26,7 +27,7 @@
 #include "tensorflow/lite/op_resolver.h"
 #endif
 
-#include "ios_image_load.h"
+#include "ios_image_load.hh"
 
 #define LOG(x) std::cerr
 
@@ -118,6 +119,7 @@ std::vector<std::string> labels;
 TfLiteInterpreter *interpreter = nullptr;
 TfLiteModel *model = nullptr;
 TfLiteDelegate *delegate = nullptr;
+bool isCoreMLDelegate = false;
 #else
 std::unique_ptr<tflite::FlatBufferModel> model;
 std::unique_ptr<tflite::Interpreter> interpreter;
@@ -153,17 +155,28 @@ NSString* loadModel(NSObject<FlutterPluginRegistrar>* _registrar, NSDictionary* 
   const int num_threads = [args[@"numThreads"] intValue];
   
 #ifdef TFLITE2
-  TfLiteInterpreterOptions *options = nullptr;
   model = TfLiteModelCreateFromFile(graph_path.UTF8String);
   if (!model) {
     return [NSString stringWithFormat:@"%s %@", "Failed to mmap model", graph_path];
   }
-  options = TfLiteInterpreterOptionsCreate();
-  TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
-  
+
   bool useGpuDelegate = [args[@"useGpuDelegate"] boolValue];
-  if (useGpuDelegate) {
-    delegate = TFLGpuDelegateCreate(nullptr);
+  bool useCoreMLDelegate = [args[@"useCoreMLDelegate"] boolValue];
+  if (useCoreMLDelegate) {
+    TfLiteCoreMlDelegateOptions options = {};
+    options.enabled_devices = TfLiteCoreMlDelegateAllDevices;
+    options.coreml_version = 3;
+    delegate = TfLiteCoreMlDelegateCreate(&options);
+    if (delegate) {
+      isCoreMLDelegate = true;
+    }
+  }
+  TfLiteInterpreterOptions *options = TfLiteInterpreterOptionsCreate();
+  if (!delegate && useGpuDelegate) {
+    TfLiteInterpreterOptionsSetNumThreads(options, num_threads);
+    delegate = TFLGpuDelegateCreate(NULL);
+  }
+  if (!delegate) {
     TfLiteInterpreterOptionsAddDelegate(options, delegate);
   }
 #else
@@ -1487,10 +1500,15 @@ void runPoseNetOnFrame(NSDictionary* args, FlutterResult result) {
 
 void close() {
 #ifdef TFLITE2
+  TfLiteInterpreterDelete(interpreter);
   interpreter = nullptr;
-  if (delegate != nullptr)
+  if (isCoreMLDelegate && delegate != nullptr) {
+    TfLiteCoreMlDelegateDelete(delegate);
+  } else if (delegate != nullptr) {
     TFLGpuDelegateDelete(delegate);
+  }
   delegate = nullptr;
+  TfLiteModelDelete(model);
 #else
   interpreter.release();
   interpreter = NULL;
