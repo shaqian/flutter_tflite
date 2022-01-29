@@ -24,11 +24,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  image_picker: ^0.6.7
+  image_picker: ^0.8.4+4
   
-  image: ^2.1.4
+  image: ^3.1.0
 
-  tflite:
+  tflite_maven:
     path: ../
 
   test: ^1.12.0
