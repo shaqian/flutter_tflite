@@ -3,8 +3,10 @@ version '1.0-SNAPSHOT'
 
 buildscript {
     repositories {
-        google()
-        jcenter()
+        mavenCentral()
+        maven {
+            url 'https://maven.google.com'
+        }
     }
 
     dependencies {
@@ -14,8 +16,10 @@ buildscript {
 
 rootProject.allprojects {
     repositories {
-        google()
-        jcenter()
+        mavenCentral()
+        maven {
+            url 'https://maven.google.com'
+        }
     }
 }
 
@@ -33,7 +37,7 @@ android {
     }
 
     dependencies {
-        compile 'org.tensorflow:tensorflow-lite:+'
-        compile 'org.tensorflow:tensorflow-lite-gpu:+'
+        implementation 'org.tensorflow:tensorflow-lite:+'
+        implementation 'org.tensorflow:tensorflow-lite-gpu:+'
     }
 }
